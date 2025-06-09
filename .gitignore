@@ -1,0 +1,23 @@
+# Archivos de entorno
+.env
+.env.*
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de Excel
+*.xlsx
+*.xls
+
+# Archivos de configuración local
+config.local.py
+
+# Archivos de logs
+*.log
+
+# Directorios de entorno virtual
+venv/
+env/
+.venv/ 

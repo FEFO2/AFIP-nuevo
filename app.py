@@ -7,10 +7,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import os
-
 import pandas as pd
 import string
 import numpy as np
+from config import *
 
 #--------------------------------------------------------------------------------------
 # PARTE 1: DESCARGA DEL ARCHIVO CON LAS FACTURAS
