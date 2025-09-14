@@ -13,91 +13,13 @@ import string
 import numpy as np
 
 #--------------------------------------------------------------------------------------
-# PARTE 1: DESCARGA DEL ARCHIVO CON LAS FACTURAS
+# PARTE 1: PROCESA LAS FACTURAS
 
-# Este es driver que va a navegar.
-driver = webdriver.Chrome()
+import pandas as pd
+import string
+import numpy as np
 
-# Esta es la web para comenzar
-afip_url = 'https://auth.afip.gob.ar/contribuyente_/login.xhtml'
-
-# Función para iniciar sesión
-def download_invoices(username, password):
-    driver.get(afip_url)
-    
-    # Esperar hasta que el campo de CUIT esté presente
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.ID, 'F1:username'))
-    )
-    
-    # Ingresar CUIT
-    cuit_field = driver.find_element(By.ID, 'F1:username')
-    cuit_field.send_keys(username)
-
-    element = driver.find_element(By.ID, 'F1:btnSiguiente')
-    element.click()
-    
-    # Ingresar Clave
-    password_field = driver.find_element(By.ID, 'F1:password')
-    password_field.send_keys(password)
-    element = driver.find_element(By.ID, 'F1:btnIngresar')
-    element.click()
-
-    # Ingresar en los servicios de facturación
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.LINK_TEXT, 'Ver todos')))
-    element = driver.find_element(By.LINK_TEXT,'Ver todos')
-    element.click()
-
-    # Abrir servicios de facturación    
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//a[@title='mcmp']")))
-    element = driver.find_element(By.XPATH, "//a[@title='mcmp']")
-    element.location_once_scrolled_into_view
-    time.sleep(5)
-    element.click()
-
-    # Encuentra el elemento y haz clic en él
-    time.sleep(5)
-    driver.switch_to.window(driver.window_handles[-1])
-    element = driver.find_element(By.XPATH,"//a[@onclick=\"document.getElementById('idcontribuyente').value='0';document.seleccionaEmpresaForm.submit();return false;\"]")
-    element.click()
-
-    # Comprobantes recibidos
-    element = driver.find_element(By.ID,"btnRecibidos")
-    element.location_once_scrolled_into_view
-    element.click()
-    time.sleep(2)
-
-    # Fecha de emisión
-    element = driver.find_element(By.ID,"btnCalendarioFechaEmision")
-    element.click()
-    time.sleep(3)
-
-    # Fecha de emisión
-    element = driver.find_element(By.XPATH,"//li[@data-range-key='Ayer']")
-    element.click()
-    time.sleep(3)
-
-    element = driver.find_element(By.ID,"buscarComprobantes")
-    element.click()
-    time.sleep(3)
-
-    # Descargar el excel
-    element = driver.find_element(By.CSS_SELECTOR, ".btn.btn-default.buttons-excel.buttons-html5.btn-defaut.btn-sm.sinborde")
-    element.click()
-    time.sleep(5)
-
-    driver.quit()
-
-download_invoices(20244138897,'Arancia.2023')
-
-#--------------------------------------------------------------------------------------
-# PARTE 2: PROCESAR LAS FACTURAS PARA ADECUARSE A LA PÁGINA WEB DE ARANCIA
-
-data = pd.read_excel(r'C:\Users\Francesc\Downloads\Mis Comprobantes Recibidos - CUIT 30714894346.xlsx', header=0, skiprows=1)
-
-#FECHA
-data['Fecha'] = pd.to_datetime(data['Fecha'], format='%d/%m/%Y')
-data['Fecha'] = data['Fecha'].dt.strftime('%m/%d/%Y')
+data = pd.read_excel(r'C:\Users\ThinkPad-PC\Downloads\Mis Comprobantes Recibidos - CUIT 30714894346.xlsx', header=0, skiprows=1)
 
 #TIPO DE FACTURA
 data['Tipo'] = data['Tipo'].astype('string').str[-9:]
@@ -117,28 +39,32 @@ data['Proveedor'] = data['Denominación Emisor'].str[:35]
 # CUIT
 data['CUIT'] = data['Nro. Doc. Emisor'].astype(str)
 
-# TIPO DE CAMBIO
-columnas = ['Imp. Neto Gravado', 'Imp. Neto No Gravado', 
-            'Imp. Op. Exentas', 'Otros Tributos', 'IVA']
-for col in columnas:
-    data[col] = data[col] * data['Tipo Cambio']
 
-# IVA (10.5 O 21)
-data['% IVA'] = (data['IVA'] / data['Imp. Neto Gravado']) * 100
-data['% IVA'] = np.where(abs(data['% IVA'] - 21) < 0.01, 21, data['% IVA'])
-data['% IVA'] = np.where(abs(data['% IVA'] - 10.5) < 0.01, 10.5, data['% IVA'])
+# IMPORTES
+data['NETO 10.5'] = data['Neto Grav. IVA 10,5%'] 
+data['IVA 10.5'] = data['IVA 10,5%'] 
+data['NETO 21'] = data['Neto Grav. IVA 21%'] 
+data['IVA 21'] = data['IVA 21%'] 
+data['NO GRAVADO'] = data['Neto No Gravado'] 
+data['EXENTO'] = data['Op. Exentas'] 
+data['IMPUESTOS'] = data['Otros Tributos']
+data['NETO 0'] = data['Neto Grav. IVA 0%']
 
-# CREAR COLUMNAS DE VALORES
-data['NETO 10.5'] = np.nan
-data['IVA 10.5'] = np.nan
-data['NETO 21'] = np.nan
-data['IVA 21'] = np.nan
-data['NO GRAVADO'] = np.nan
 
 # PONER 0 A TODAS LAS COLUMNAS
-columnas = ['NETO 10.5', 'IVA 10.5', 'NETO 21', 'IVA 21', 'NO GRAVADO']
-for col in columnas:
+columnas = ['NETO 0', 'NETO 10.5', 'IVA 10.5', 'NETO 21', 'IVA 21', 'NO GRAVADO', 'EXENTO', 'IMPUESTOS',
+            'IVA 2,5%', 'IVA 5%', 'IVA 27%'] 
+for col in columnas: 
     data[col] = data[col].fillna(0)
+
+# TIPO DE CAMBIO ESTE CAMBIAR PORQUE CAMBIA A FUTURO
+columnas_tc = ['NETO 10.5', 'IVA 10.5', 'NETO 21', 'IVA 21', 'NO GRAVADO', 'EXENTO', 'IMPUESTOS'] 
+for col in columnas_tc: 
+    data[col] = data[col] * data['Tipo Cambio']
+
+# SUMAR LO QUE NO LLEVA IVA
+data['TOTAL_NO_GRAVADO'] = (data['NO GRAVADO'] + data['EXENTO'] + data['IMPUESTOS'] + data['NETO 0'])
+
 
 # Convertimos las columnas a str
 data['NETO 10.5'] = data['NETO 10.5'].astype(str)
@@ -146,36 +72,27 @@ data['IVA 10.5'] = data['IVA 10.5'].astype(str)
 data['NETO 21'] = data['NETO 21'].astype(str)
 data['IVA 21'] = data['IVA 21'].astype(str)
 
-
-# Asignamos los valores correspondientes a las nuevas columnas
-data.loc[data['% IVA'] == 10.5, 'NETO 10.5'] = data['Imp. Neto Gravado'].astype(str)
-data.loc[data['% IVA'] == 10.5, 'IVA 10.5'] = data['IVA'].astype(str)
-data.loc[data['% IVA'] == 21, 'NETO 21'] = data['Imp. Neto Gravado'].astype(str)
-data.loc[data['% IVA'] == 21, 'IVA 21'] = data['IVA'].astype(str)
-data[col] = data[col].fillna(0)
-# NO GRAVADO
-data['NO GRAVADO'] = (data['Imp. Neto No Gravado'] + data['Imp. Op. Exentas'] + data['Otros Tributos'])
-
 # PONER EN NEGATICO LAS COLUMNAS QUE SON CREDITO
 for col in columnas:
     data.loc[data['Tipo2'] == 'Crédito', col] = -data[col].astype(float)
     data[col] = data[col].astype(str)
 
 # CREAR Y APLICAR MÁSCARA
-clean = ['Fecha','Tipo3','Factura',
+clean = ['Fecha','Factura',
         'Proveedor','CUIT',
         'NETO 10.5', 'IVA 10.5',
-        'NETO 21', 'IVA 21', 'NO GRAVADO']
+        'NETO 21', 'IVA 21', 'TOTAL_NO_GRAVADO']
 
 clean_data = data[clean]
+clean_data
 
 #--------------------------------------------------------------------------------------
-# PARTE 3: SUBIR LAS FACTURAS AL SERVIDOR DE ARANCIA
+# PARTE 2: SUBIR LAS FACTURAS AL SERVIDOR DE ARANCIA
 
-# Web driver
+#Este es driver que va a navegar.
 driver = webdriver.Chrome()
 
-# Pagina web
+# Función para iniciar sesión
 arancia_url = 'http://arancia-001-site1.btempurl.com/'
 
 driver.get(arancia_url)
@@ -223,8 +140,4 @@ for index, row in clean_data.iterrows():
     # Espera un poco para que la página se actualice
     time.sleep(3)
 
-# Cerrar driver
-driver.quit()
-
-# Eliminar el archivo
-os.remove(r'C:\Users\Francesc\Downloads\Mis Comprobantes Recibidos - CUIT 30714894346.xlsx')
+    os.remove(r'C:\Users\ThinkPad-PC\Downloads\Mis Comprobantes Recibidos - CUIT 30714894346.xlsx')
