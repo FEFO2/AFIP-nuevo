@@ -8,7 +8,7 @@ import re
 # --- This function will use the document called "comprobantes recibidos" and will transform into the private database.
 
 
-def transform_inbound_invoices(data):
+def transform_afip_inbound_invoices(data):
     #TIPO DE FACTURA
     data['Tipo'] = data['Tipo'].astype('string').str[-9:]
     data['Tipo2'] = data['Tipo'].str[:7]
@@ -77,7 +77,7 @@ def transform_inbound_invoices(data):
 # ------ FUNCTION 2 --------
 # --- This function will use the document called "comprobantes emitidos" and will transform into the private database.
 
-def transform_outbound_invoices(data):
+def transform_afip_outbound_invoices(data):
     #TIPO DE FACTURA
 #TIPO DE FACTURA
     data['codigo_fc'] = [int(re.match(r'(\d+)', x).group(1)) for x in data['Tipo']]
