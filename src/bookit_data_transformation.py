@@ -109,7 +109,7 @@ def procesar_inbound_html(path_html: str) -> pd.DataFrame:
     df = df[required_cols]
 
     # Convertir columnas numéricas
-    for col in ['NETO 10.5','IVA 10.5','NETO 21','IVA 21','NO GRAVADO']:
+    for col in ['NETO 10.5','IVA 10.5','NETO 21','IVA 21','TOTAL_NO_GRAVADO']:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
     print(f"✅ Archivo {path_html} procesado correctamente ({len(df)} filas).")

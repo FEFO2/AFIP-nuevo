@@ -137,7 +137,7 @@ def comparar_facturas_compra(afip_df, sistem_df,tolerancia = 1.0):
         print(f"❌ La factura {factura} no está cargada correctamente (diferencia en totales).")
 
     # --- Filtrar solo las facturas correctamente cargadas ---
-    resultado = merged.loc[~merged['loaded'], a.columns[:9]].copy()
+    resultado = merged.loc[~merged['loaded'], a.columns[:13]].copy()
 
 
     print(f"✅ {len(resultado)} facturas correctamente cargadas y listas para procesar.")
