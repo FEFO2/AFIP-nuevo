@@ -61,10 +61,10 @@ def download_arancia_reports(playwright: Playwright) -> None:
     html_inbound = frame_marco.content()
 
     # --- Guardar los HTML localmente ---
-    with open("download/outbound.html", "w", encoding="utf-8") as f:
+    with open("downloads/outbound.html", "w", encoding="utf-8") as f:
         f.write(html_outbound)
 
-    with open("download/inbound.html", "w", encoding="utf-8") as f:
+    with open("downloads/inbound.html", "w", encoding="utf-8") as f:
         f.write(html_inbound)
 
     print("✅ Archivos guardados: outbound.html e inbound.html")
