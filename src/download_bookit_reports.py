@@ -49,7 +49,7 @@ def download_arancia_reports(playwright: Playwright) -> None:
 
     # --- Seleccionar período (ejemplo: octubre 2025) ---
     frame_marco.wait_for_selector("#DropDownList1")
-    frame_marco.locator("#DropDownList1").select_option("102025")
+    frame_marco.locator("#DropDownList1").select_option("112025")
 
     # Guardar HTML de la pestaña de ventas ("VENTAS DEL MES")
     frame_marco.wait_for_timeout(1000)
