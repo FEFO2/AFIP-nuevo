@@ -25,7 +25,6 @@ def download_arancia_reports(playwright: Playwright) -> None:
 
     # --- Login ---
     page.goto(url)
-    page.get_by_role("button", name="Entrar").click()
     page.locator('input[name="TextBox1"]').fill(user)
     page.locator('input[name="TextBox2"]').fill(password)
     page.get_by_role("button", name="Ingresar").click()
@@ -53,12 +52,12 @@ def download_arancia_reports(playwright: Playwright) -> None:
 
     # Guardar HTML de la pestaña de ventas ("VENTAS DEL MES")
     frame_marco.wait_for_timeout(1000)
-    html_outbound = frame_marco.content()
+    html_outbound = frame_marco.evaluate("() => document.documentElement.outerHTML")
 
     # --- Cambiar a pestaña de compras ---
     frame_marco.get_by_role("radio", name="COMPRAS DEL MES").check()
     frame_marco.wait_for_timeout(2000)
-    html_inbound = frame_marco.content()
+    html_inbound = frame_marco.evaluate("() => document.documentElement.outerHTML")
 
     # --- Guardar los HTML localmente ---
     with open("downloads/outbound.html", "w", encoding="utf-8") as f:

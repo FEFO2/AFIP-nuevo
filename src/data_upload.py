@@ -202,23 +202,3 @@ def cargar_facturas_ventas(data: pd.DataFrame):
 
 
 # --------------------------------------------------
-
-import pandas as pd
-
-# Crear un DataFrame de prueba con una sola fila
-clean_data = pd.DataFrame([{
-    "Fecha": "01/10/2025",
-    "tipo2_new": "Pyme_fc",
-    "tipo3_new": "A",
-    "Factura": "00000000",
-    "Cliente": "PRUEBA",
-    "CUIT": "11111111",
-    "TOTAL_10.5": 0.00,
-    "TOTAL_21": 0.00,
-    "TOTAL_NO_GRAVADO": 0.00
-}])
-
-
-print(clean_data)
-
-# cargar_facturas_compra(clean_data)
