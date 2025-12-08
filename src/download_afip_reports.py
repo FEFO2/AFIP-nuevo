@@ -60,7 +60,7 @@ def download_reports(playwright: Playwright) -> None:
             # --- filter by month ---
             page1.wait_for_load_state("networkidle")            
             page1.get_by_role("textbox", name="Fecha del Comprobante *").click()
-            page1.get_by_text("Este Mes").click()
+            page1.get_by_text("Este mes").click()
             page1.get_by_role("button", name="Buscar").click()
 
             # --- download file ---
