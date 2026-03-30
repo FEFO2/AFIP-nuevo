@@ -67,7 +67,7 @@ def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
             download = download_info.value
             target_path = downloads_dir / file_name
             download.save_as(str(target_path))
-            print(f"Archivo {file_name} descargado en: {target_path}")
+            print(f"[OK] AFIP: archivo descargado en {target_path}")
 
             if index == 0:
                 menu_principal = popup.locator("a[href='menuPrincipal.do']")

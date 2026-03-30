@@ -119,7 +119,7 @@ def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -
         outbound_path.write_text(html_outbound, encoding="utf-8")
         inbound_path.write_text(html_inbound, encoding="utf-8")
 
-        print(f"Archivos guardados: {outbound_path.name} e {inbound_path.name}")
+        print(f"[OK] Bookit: archivos guardados en {outbound_path} y {inbound_path}")
         return html_outbound, html_inbound
     finally:
         context.close()

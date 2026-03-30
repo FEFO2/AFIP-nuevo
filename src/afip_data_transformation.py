@@ -1,159 +1,222 @@
-import pandas as pd
-import string
-import numpy as np
+from __future__ import annotations
+
 import re
+import string
+
+import numpy as np
+import pandas as pd
 
 
-# ------ FUNCTION 1 --------
-# --- This function will use the document called "comprobantes recibidos" and will transform into the private database.
+PURCHASE_AMOUNT_COLUMNS = [
+    "NETO 0",
+    "NETO 10.5",
+    "IVA 10.5",
+    "NETO 21",
+    "IVA 21",
+    "NO GRAVADO",
+    "EXENTO",
+    "IMPUESTOS",
+    "IVA 2,5%",
+    "IVA 5%",
+    "IVA 27%",
+    "TOTAL_NO_GRAVADO",
+]
+
+PURCHASE_EXCHANGE_RATE_COLUMNS = [
+    "NETO 10.5",
+    "IVA 10.5",
+    "NETO 21",
+    "IVA 21",
+    "NO GRAVADO",
+    "EXENTO",
+    "IMPUESTOS",
+]
+
+SALES_AMOUNT_COLUMNS = [
+    "NETO 0",
+    "NETO 10.5",
+    "IVA 10.5",
+    "NETO 21",
+    "IVA 21",
+    "NO GRAVADO",
+    "EXENTO",
+    "IMPUESTOS",
+    "IVA 2,5%",
+    "IVA 5%",
+    "IVA 27%",
+    "TOTAL_NO_GRAVADO",
+    "TOTAL_10.5",
+    "TOTAL_21",
+]
+
+SALES_EXCHANGE_RATE_COLUMNS = [
+    "NETO 0",
+    "NETO 10.5",
+    "IVA 10.5",
+    "NETO 21",
+    "IVA 21",
+    "NO GRAVADO",
+    "EXENTO",
+    "IMPUESTOS",
+    "TOTAL_10.5",
+    "TOTAL_21",
+]
 
 
-def transform_afip_inbound_invoices(data):
-    #TIPO DE FACTURA
-    data['Tipo'] = data['Tipo'].astype('string').str[-9:]
-    data['Tipo2'] = data['Tipo'].str[:7]
-    data['Tipo3'] = data['Tipo'].str[-1:]
-
-    # FACTURA
-    data['Punto de Venta'] = data['Punto de Venta'].astype(str).str.zfill(5)
-    data['Número Desde'] = data['Número Desde'].astype(str).str.zfill(8)
-    data['Factura'] = data['Punto de Venta'] + '-' + data['Número Desde']
-
-    # PROVEEDOR
-    data['Denominación Emisor'] = data['Denominación Emisor'].str.translate(
-        str.maketrans('', '', string.punctuation))
-    data['Proveedor'] = data['Denominación Emisor'].str[:35]
-
-    # CUIT
-    data['CUIT'] = data['Nro. Doc. Emisor'].astype(str)
+def _sanitize_text_column(series: pd.Series) -> pd.Series:
+    return series.str.translate(str.maketrans("", "", string.punctuation))
 
 
-    # IMPORTES
-    data['NETO 10.5'] = data['Neto Grav. IVA 10,5%'] 
-    data['IVA 10.5'] = data['IVA 10,5%'] 
-    data['NETO 21'] = data['Neto Grav. IVA 21%'] 
-    data['IVA 21'] = data['IVA 21%'] 
-    data['NO GRAVADO'] = data['Neto No Gravado'] 
-    data['EXENTO'] = data['Op. Exentas'] 
-    data['IMPUESTOS'] = data['Otros Tributos']
-    data['NETO 0'] = data['Neto Grav. IVA 0%']
-    data['TOTAL_NO_GRAVADO'] = (data['NO GRAVADO'] + data['EXENTO'] + data['IMPUESTOS'] + data['NETO 0'])
-
-    # PONER 0 A TODAS LAS COLUMNAS
-    columnas = ['NETO 0', 'NETO 10.5', 'IVA 10.5', 'NETO 21', 'IVA 21', 'NO GRAVADO', 'EXENTO', 'IMPUESTOS',
-                'IVA 2,5%', 'IVA 5%', 'IVA 27%', 'TOTAL_NO_GRAVADO'] 
-    for col in columnas: 
-        data[col] = data[col].fillna(0)
-
-    # TIPO DE CAMBIO ESTE CAMBIAR PORQUE CAMBIA A FUTURO
-    columnas_tc = ['NETO 10.5', 'IVA 10.5', 'NETO 21', 'IVA 21', 'NO GRAVADO', 'EXENTO', 'IMPUESTOS'] 
-    for col in columnas_tc: 
-        data[col] = data[col] * data['Tipo Cambio']
-
-    # SUMAR LO QUE NO LLEVA IVA
-    data['TOTAL_NO_GRAVADO'] = (data['NO GRAVADO'] + data['EXENTO'] + data['IMPUESTOS'] + data['NETO 0'])
-
-    # Convertimos las columnas a str
-    data['NETO 10.5'] = data['NETO 10.5'].astype(str)
-    data['IVA 10.5'] = data['IVA 10.5'].astype(str)
-    data['NETO 21'] = data['NETO 21'].astype(str)
-    data['IVA 21'] = data['IVA 21'].astype(str)
-
-    # PONER EN NEGATICO LAS COLUMNAS QUE SON CREDITO
-    for col in columnas:
-        data.loc[data['Tipo2'] == 'Crédito', col] = -data[col].astype(float)
-        data[col] = data[col].astype(str)
-
-    # CREAR Y APLICAR MÁSCARA
-    clean = ['Fecha','Tipo2','Tipo3', 'Factura',
-            'Proveedor','CUIT', 'NETO 10.5', 
-            'NETO 21', 'IVA 10.5', 'IVA 21', 
-            'TOTAL_NO_GRAVADO']
-
-    clean_data = data[clean]
-    return clean_data
+def _fill_amount_columns(data: pd.DataFrame, columns: list[str]) -> None:
+    for column in columns:
+        data[column] = data[column].fillna(0)
 
 
-# ------ FUNCTION 2 --------
-# --- This function will use the document called "comprobantes emitidos" and will transform into the private database.
-
-def transform_afip_outbound_invoices(data):
-    #TIPO DE FACTURA
-#TIPO DE FACTURA
-    data['codigo_fc'] = [int(re.match(r'(\d+)', x).group(1)) for x in data['Tipo']]
-    data['Tipo'] = data['Tipo'].astype('string').str[-9:]
-    data['Tipo2'] = data['Tipo'].str[:7]
-    data['Tipo3'] = data['Tipo'].str[-1:]
-
-    data['tipo2_new'] = np.where(data['codigo_fc'].isin([1,6,11]), "Factura", "Credito")
-    data['tipo2_new'] = np.where(data['codigo_fc'] == 201, "Pyme_fc", data['tipo2_new'])
-    data['tipo2_new'] = np.where(data['codigo_fc'] == 203, "Pyme_nc", data['tipo2_new'])
-
-    data['tipo3_new'] = np.where(data['codigo_fc'].isin([1,3,201,203]), "A", "C")
-    data['tipo3_new'] = np.where(data['codigo_fc'].isin([6,8]), "B", data['tipo3_new'])
-
-    data['tipo3_new']
-
-    # FACTURA
-    data['Punto de Venta'] = data['Punto de Venta'].astype(str).str.zfill(5)
-    data['Número Desde'] = data['Número Desde'].astype(str).str.zfill(8)
-    data['Factura'] = data['Número Desde'].astype(int)
-
-    # Cliente
-    data['Denominación Receptor'] = data['Denominación Receptor'].str.translate(
-        str.maketrans('', '', string.punctuation))
-    data['Cliente'] = data['Denominación Receptor'].str[:35]
-
-    # CUIT
-    data['CUIT'] = data['Nro. Doc. Receptor'].astype(str)
+def _apply_exchange_rate(data: pd.DataFrame, columns: list[str]) -> None:
+    for column in columns:
+        data[column] = data[column] * data["Tipo Cambio"]
 
 
-    # IMPORTES
-    data['NETO 10.5'] = data['Neto Grav. IVA 10,5%'] 
-    data['IVA 10.5'] = data['IVA 10,5%'] 
-    data['NETO 21'] = data['Neto Grav. IVA 21%'] 
-    data['IVA 21'] = data['IVA 21%'] 
-    data['NO GRAVADO'] = data['Neto No Gravado'] 
-    data['EXENTO'] = data['Op. Exentas'] 
-    data['IMPUESTOS'] = data['Otros Tributos']
-    data['NETO 0'] = data['Neto Grav. IVA 0%']
-    data['TOTAL_NO_GRAVADO'] = (data['NO GRAVADO'] + data['EXENTO'] + data['IMPUESTOS'] + data['NETO 0'])
-    data['TOTAL_10.5'] = round(data['NETO 10.5'] + data['IVA 10.5'],2)
-    data['TOTAL_21'] = round(data['NETO 21'] + data['IVA 21'],2)
+def transform_afip_inbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
+    transformed = data.copy()
+
+    transformed["Tipo"] = transformed["Tipo"].astype("string").str[-9:]
+    transformed["Tipo2"] = transformed["Tipo"].str[:7]
+    transformed["Tipo3"] = transformed["Tipo"].str[-1:]
+
+    transformed["Punto de Venta"] = transformed["Punto de Venta"].astype(str).str.zfill(5)
+    transformed["Número Desde"] = transformed["Número Desde"].astype(str).str.zfill(8)
+    transformed["Factura"] = transformed["Punto de Venta"] + "-" + transformed["Número Desde"]
+
+    transformed["Denominación Emisor"] = _sanitize_text_column(transformed["Denominación Emisor"])
+    transformed["Proveedor"] = transformed["Denominación Emisor"].str[:35]
+    transformed["CUIT"] = transformed["Nro. Doc. Emisor"].astype(str)
+
+    transformed["NETO 10.5"] = transformed["Neto Grav. IVA 10,5%"]
+    transformed["IVA 10.5"] = transformed["IVA 10,5%"]
+    transformed["NETO 21"] = transformed["Neto Grav. IVA 21%"]
+    transformed["IVA 21"] = transformed["IVA 21%"]
+    transformed["NO GRAVADO"] = transformed["Neto No Gravado"]
+    transformed["EXENTO"] = transformed["Op. Exentas"]
+    transformed["IMPUESTOS"] = transformed["Otros Tributos"]
+    transformed["NETO 0"] = transformed["Neto Grav. IVA 0%"]
+
+    _fill_amount_columns(transformed, PURCHASE_AMOUNT_COLUMNS)
+    _apply_exchange_rate(transformed, PURCHASE_EXCHANGE_RATE_COLUMNS)
+
+    transformed["TOTAL_NO_GRAVADO"] = (
+        transformed["NO GRAVADO"]
+        + transformed["EXENTO"]
+        + transformed["IMPUESTOS"]
+        + transformed["NETO 0"]
+    )
+
+    for column in ["NETO 10.5", "IVA 10.5", "NETO 21", "IVA 21"]:
+        transformed[column] = transformed[column].astype(str)
+
+    credit_mask = transformed["Tipo2"] == "Crédito"
+    for column in PURCHASE_AMOUNT_COLUMNS:
+        transformed.loc[credit_mask, column] = -transformed.loc[credit_mask, column].astype(float)
+        transformed[column] = transformed[column].astype(str)
+
+    return transformed[
+        [
+            "Fecha",
+            "Tipo2",
+            "Tipo3",
+            "Factura",
+            "Proveedor",
+            "CUIT",
+            "NETO 10.5",
+            "NETO 21",
+            "IVA 10.5",
+            "IVA 21",
+            "TOTAL_NO_GRAVADO",
+        ]
+    ].copy()
 
 
-    # PONER 0 A TODAS LAS COLUMNAS QUE NO TIENEN ALGO
-    columnas = ['NETO 0', 'NETO 10.5', 'IVA 10.5', 'NETO 21', 'IVA 21', 'NO GRAVADO', 'EXENTO', 'IMPUESTOS',
-                'IVA 2,5%', 'IVA 5%', 'IVA 27%', 'TOTAL_NO_GRAVADO', 'TOTAL_10.5', 'TOTAL_21'] 
-    for col in columnas: 
-        data[col] = data[col].fillna(0)
+def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
+    transformed = data.copy()
 
-    # TIPO DE CAMBIO ESTE CAMBIAR PORQUE CAMBIA A FUTURO
-    columnas_tc = ['NETO 0','NETO 10.5', 'IVA 10.5', 'NETO 21', 'IVA 21', 'NO GRAVADO', 'EXENTO', 'IMPUESTOS', 'TOTAL_10.5', 'TOTAL_21'] 
-    for col in columnas_tc: 
-        data[col] = data[col] * data['Tipo Cambio']
+    transformed["codigo_fc"] = [int(re.match(r"(\d+)", value).group(1)) for value in transformed["Tipo"]]
+    transformed["Tipo"] = transformed["Tipo"].astype("string").str[-9:]
+    transformed["Tipo2"] = transformed["Tipo"].str[:7]
+    transformed["Tipo3"] = transformed["Tipo"].str[-1:]
 
-    # SUMAR LO QUE NO LLEVA IVA
-    data['TOTAL_NO_GRAVADO'] = (data['NO GRAVADO'] + data['EXENTO'] + data['IMPUESTOS'] + data['NETO 0'])
+    transformed["tipo2_new"] = np.where(
+        transformed["codigo_fc"].isin([1, 6, 11]),
+        "Factura",
+        "Credito",
+    )
+    transformed["tipo2_new"] = np.where(
+        transformed["codigo_fc"] == 201,
+        "Pyme_fc",
+        transformed["tipo2_new"],
+    )
+    transformed["tipo2_new"] = np.where(
+        transformed["codigo_fc"] == 203,
+        "Pyme_nc",
+        transformed["tipo2_new"],
+    )
 
-    # Convertimos las columnas a str
-    data['NETO 10.5'] = data['NETO 10.5'].astype(str)
-    data['IVA 10.5'] = data['IVA 10.5'].astype(str)
-    data['NETO 21'] = data['NETO 21'].astype(str)
-    data['IVA 21'] = data['IVA 21'].astype(str)
-    data['TOTAL_21'] = data['TOTAL_21'].astype(str)
-    data['TOTAL_10.5'] = data['TOTAL_10.5'].astype(str)
+    transformed["tipo3_new"] = np.where(transformed["codigo_fc"].isin([1, 3, 201, 203]), "A", "C")
+    transformed["tipo3_new"] = np.where(transformed["codigo_fc"].isin([6, 8]), "B", transformed["tipo3_new"])
 
-    # PONER EN NEGATIVO LAS COLUMNAS QUE SON CREDITO
-    for col in columnas:
-        mask = (data['tipo2_new'] == 'Credito') | (data['tipo2_new'] == 'Pyme_nc')
-        data.loc[mask, col] = -data.loc[mask, col].astype(float)
-        data[col] = data[col].astype(str)
+    transformed["Punto de Venta"] = transformed["Punto de Venta"].astype(str).str.zfill(5)
+    transformed["Número Desde"] = transformed["Número Desde"].astype(str).str.zfill(8)
+    transformed["Factura"] = transformed["Número Desde"].astype(int)
 
-    # CREAR Y APLICAR MÁSCARA
-    clean = ['Fecha','tipo2_new','tipo3_new', 'Factura',
-            'Cliente','CUIT', 'TOTAL_10.5', 'TOTAL_21',
-            'TOTAL_NO_GRAVADO']
+    transformed["Denominación Receptor"] = _sanitize_text_column(transformed["Denominación Receptor"])
+    transformed["Cliente"] = transformed["Denominación Receptor"].str[:35]
+    transformed["CUIT"] = transformed["Nro. Doc. Receptor"].astype(str)
 
-    clean_data = data[clean]
-    return clean_data
+    transformed["NETO 10.5"] = transformed["Neto Grav. IVA 10,5%"]
+    transformed["IVA 10.5"] = transformed["IVA 10,5%"]
+    transformed["NETO 21"] = transformed["Neto Grav. IVA 21%"]
+    transformed["IVA 21"] = transformed["IVA 21%"]
+    transformed["NO GRAVADO"] = transformed["Neto No Gravado"]
+    transformed["EXENTO"] = transformed["Op. Exentas"]
+    transformed["IMPUESTOS"] = transformed["Otros Tributos"]
+    transformed["NETO 0"] = transformed["Neto Grav. IVA 0%"]
+
+    transformed["TOTAL_NO_GRAVADO"] = (
+        transformed["NO GRAVADO"]
+        + transformed["EXENTO"]
+        + transformed["IMPUESTOS"]
+        + transformed["NETO 0"]
+    )
+    transformed["TOTAL_10.5"] = round(transformed["NETO 10.5"] + transformed["IVA 10.5"], 2)
+    transformed["TOTAL_21"] = round(transformed["NETO 21"] + transformed["IVA 21"], 2)
+
+    _fill_amount_columns(transformed, SALES_AMOUNT_COLUMNS)
+    _apply_exchange_rate(transformed, SALES_EXCHANGE_RATE_COLUMNS)
+
+    transformed["TOTAL_NO_GRAVADO"] = (
+        transformed["NO GRAVADO"]
+        + transformed["EXENTO"]
+        + transformed["IMPUESTOS"]
+        + transformed["NETO 0"]
+    )
+
+    for column in ["NETO 10.5", "IVA 10.5", "NETO 21", "IVA 21", "TOTAL_21", "TOTAL_10.5"]:
+        transformed[column] = transformed[column].astype(str)
+
+    credit_mask = (transformed["tipo2_new"] == "Credito") | (transformed["tipo2_new"] == "Pyme_nc")
+    for column in SALES_AMOUNT_COLUMNS:
+        transformed.loc[credit_mask, column] = -transformed.loc[credit_mask, column].astype(float)
+        transformed[column] = transformed[column].astype(str)
+
+    return transformed[
+        [
+            "Fecha",
+            "tipo2_new",
+            "tipo3_new",
+            "Factura",
+            "Cliente",
+            "CUIT",
+            "TOTAL_10.5",
+            "TOTAL_21",
+            "TOTAL_NO_GRAVADO",
+        ]
+    ].copy()
