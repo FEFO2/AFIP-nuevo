@@ -1,15 +1,28 @@
-# Libraries
+from __future__ import annotations
 
-# from selenium import webdriver
-# from selenium.webdriver.common.by import By
-# from selenium.webdriver.common.keys import Keys
-# from selenium.webdriver.support.ui import WebDriverWait
-# from selenium.webdriver.support import expected_conditions as EC
-# import time
-# import os
+from pathlib import Path
+import shutil
 
 
-# --------------------------------------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DOWNLOADS_DIR = PROJECT_ROOT / "downloads"
 
-# 
 
+def ensure_downloads_dir() -> Path:
+    DOWNLOADS_DIR.mkdir(exist_ok=True)
+    return DOWNLOADS_DIR
+
+
+def clear_downloads_dir() -> Path:
+    downloads_dir = ensure_downloads_dir()
+
+    for child in downloads_dir.iterdir():
+        if child.name.startswith("."):
+            continue
+
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+    return downloads_dir

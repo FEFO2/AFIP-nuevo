@@ -1,79 +1,140 @@
-import time
-import re
+from __future__ import annotations
+
 import os
-from playwright.sync_api import Playwright, sync_playwright, expect
+import time
+
 from dotenv import load_dotenv
+from playwright.sync_api import Frame, Playwright, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
-# --- variables ---
-load_dotenv()
-required_vars = ['ARANCIA_URL', 'ARANCIA_USERNAME', 'ARANCIA_PASSWORD']
-for var in required_vars:
-    if not os.getenv(var):
-        raise EnvironmentError(f"❌ Missing environment variable: {var}")
+from utils import ensure_downloads_dir
 
-# --- main function ---
-def download_arancia_reports(playwright: Playwright) -> None:
-    # --- Variables de entorno ---
-    url = os.getenv("ARANCIA_URL")
-    user = os.getenv("ARANCIA_USERNAME")
-    password = os.getenv("ARANCIA_PASSWORD")
 
-    # --- Inicialización del navegador ---
-    browser = playwright.chromium.launch(headless=True)  # headless=False para ver lo que pasa
+def _get_required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise EnvironmentError(f"Missing environment variable: {name}")
+    return value
+
+
+def _wait_for_frame(page, name: str, timeout_ms: int = 30_000) -> Frame:
+    deadline = time.monotonic() + (timeout_ms / 1000)
+
+    while time.monotonic() < deadline:
+        frame = page.frame(name=name)
+        if frame is not None:
+            return frame
+        page.wait_for_timeout(200)
+
+    raise TimeoutError(f"No se pudo obtener el iframe '{name}'.")
+
+
+def _wait_for_child_frame(
+    parent_frame: Frame,
+    name: str,
+    *,
+    required_selector: str | None = None,
+    timeout_ms: int = 30_000,
+) -> Frame:
+    deadline = time.monotonic() + (timeout_ms / 1000)
+
+    while time.monotonic() < deadline:
+        for child_frame in parent_frame.child_frames:
+            if child_frame.name != name:
+                continue
+
+            if required_selector is None:
+                return child_frame
+
+            try:
+                child_frame.locator(required_selector).wait_for(state="visible", timeout=500)
+                return child_frame
+            except PlaywrightTimeoutError:
+                continue
+
+        parent_frame.page.wait_for_timeout(200)
+
+    raise TimeoutError(f"No se pudo obtener el iframe hijo '{name}'.")
+
+
+def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -> tuple[str, str]:
+    load_dotenv()
+
+    url = _get_required_env("ARANCIA_URL")
+    user = _get_required_env("ARANCIA_USERNAME")
+    password = _get_required_env("ARANCIA_PASSWORD")
+    downloads_dir = ensure_downloads_dir()
+
+    browser = playwright.chromium.launch(headless=headless)
     context = browser.new_context()
     page = context.new_page()
 
-    # --- Login ---
-    page.goto(url)
-    page.locator('input[name="TextBox1"]').fill(user)
-    page.locator('input[name="TextBox2"]').fill(password)
-    page.get_by_role("button", name="Ingresar").click()
-    time.sleep(3)
+    try:
+        page.goto(url)
 
-    # --- Navegación hasta AFIP ---
-    page.get_by_role("button", name="Facturacion").click()
-    time.sleep(3)
+        if not page.locator("#TextBox1").is_visible():
+            enter_button = page.locator("#Button1")
+            if enter_button.count():
+                enter_button.first.click()
 
-    # Esperar a que aparezca el iframe "facturacion"
-    page.wait_for_selector("iframe[name='facturacion']")
-    frame_facturacion = page.frame(name="facturacion")
-    frame_facturacion.get_by_role("button", name="Afip").click()
-    
-    # Esperás a que cargue el iframe interno
-    frame_marco = None
-    for f in frame_facturacion.child_frames:
-        if f.name == "marco":
-            frame_marco = f
-            break
+        page.locator("#TextBox1").wait_for(state="visible", timeout=30_000)
+        page.locator("#TextBox1").fill(user)
+        page.locator("#TextBox2").fill(password)
+        page.locator("#Button1").click()
+        page.wait_for_load_state("networkidle")
 
-    # --- Seleccionar período (ejemplo: octubre 2025) ---
-    frame_marco.wait_for_selector("#DropDownList1")
-    frame_marco.locator("#DropDownList1").select_option("32026")
+        if page.locator("#Button10").count():
+            page.locator("#Button10").click()
+        else:
+            page.get_by_role("button", name="Facturacion").click()
+        page.wait_for_timeout(1_000)
 
-    # Guardar HTML de la pestaña de ventas ("VENTAS DEL MES")
-    frame_marco.wait_for_timeout(1000)
-    html_outbound = frame_marco.evaluate("() => document.documentElement.outerHTML")
+        frame_facturacion = _wait_for_frame(page, "facturacion")
+        if frame_facturacion.get_by_role("button", name="Afip").count():
+            frame_facturacion.get_by_role("button", name="Afip").click()
+        else:
+            frame_facturacion.locator("#Button7").click()
+        page.wait_for_timeout(1_000)
 
-    # --- Cambiar a pestaña de compras ---
-    frame_marco.get_by_role("radio", name="COMPRAS DEL MES").check()
-    frame_marco.wait_for_timeout(2000)
-    html_inbound = frame_marco.evaluate("() => document.documentElement.outerHTML")
+        frame_marco = _wait_for_child_frame(
+            frame_facturacion,
+            "marco",
+            required_selector="#DropDownList1",
+        )
 
-    # --- Guardar los HTML localmente ---
-    with open("downloads/outbound.html", "w", encoding="utf-8") as f:
-        f.write(html_outbound)
+        selected_option = frame_marco.locator("#DropDownList1").locator("option[selected]").get_attribute(
+            "value"
+        )
+        if selected_option:
+            frame_marco.locator("#DropDownList1").select_option(selected_option)
 
-    with open("downloads/inbound.html", "w", encoding="utf-8") as f:
-        f.write(html_inbound)
+        page.wait_for_timeout(1_000)
+        html_outbound = frame_marco.evaluate("() => document.documentElement.outerHTML")
 
-    print("✅ Archivos guardados: outbound.html e inbound.html")
+        frame_marco.get_by_role("radio", name="COMPRAS DEL MES").check()
+        page.wait_for_timeout(2_000)
+        html_inbound = frame_marco.evaluate("() => document.documentElement.outerHTML")
 
-    # --- Cerrar navegador ---
-    context.close()
-    browser.close()
+        outbound_path = downloads_dir / "outbound.html"
+        inbound_path = downloads_dir / "inbound.html"
+        outbound_path.write_text(html_outbound, encoding="utf-8")
+        inbound_path.write_text(html_inbound, encoding="utf-8")
 
-    return html_outbound, html_inbound
+        print(f"Archivos guardados: {outbound_path.name} e {inbound_path.name}")
+        return html_outbound, html_inbound
+    finally:
+        context.close()
+        browser.close()
 
 
-with sync_playwright() as playwright:
-    download_arancia_reports(playwright)
+def run_download_arancia_reports(*, headless: bool = True) -> tuple[str, str]:
+    with sync_playwright() as playwright:
+        return download_arancia_reports(playwright, headless=headless)
+
+
+def main() -> int:
+    run_download_arancia_reports()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

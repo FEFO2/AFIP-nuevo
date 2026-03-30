@@ -1,204 +1,198 @@
-# import libraries
-from playwright.sync_api import sync_playwright
-import pandas as pd
-import time
+from __future__ import annotations
+
 import os
+import time
+from dataclasses import dataclass
+
+import pandas as pd
 from dotenv import load_dotenv
+from playwright.sync_api import Frame, Page, sync_playwright
 
 
-# --- FUNCION 1: CARGA DE COMPRAS ---
+DEFAULT_TIMEOUT_MS = 30_000
+DEFAULT_WAIT_MS = 1_000
 
-def cargar_facturas_compra(data: pd.DataFrame):
-    """
-    Carga los datos de un DataFrame en el sistema Arancia utilizando Playwright.
-    Las credenciales y la URL se toman desde el archivo .env.
-    """
 
-    # --- Cargar variables de entorno ---
+@dataclass(frozen=True)
+class AranciaSettings:
+    url: str
+    username: str
+    password: str
+
+
+def load_arancia_settings() -> AranciaSettings:
     load_dotenv()
-    ARANCIA_URL = os.getenv("ARANCIA_URL")
-    ARANCIA_USERNAME = os.getenv("ARANCIA_USERNAME")
-    ARANCIA_PASSWORD = os.getenv("ARANCIA_PASSWORD")
 
-    # Validación básica
-    if not ARANCIA_URL or not ARANCIA_USERNAME or not ARANCIA_PASSWORD:
-        raise ValueError("Faltan variables ARANCIA_URL, ARANCIA_USERNAME o ARANCIA_PASSWORD en el archivo .env")
+    url = os.getenv("ARANCIA_URL")
+    username = os.getenv("ARANCIA_USERNAME")
+    password = os.getenv("ARANCIA_PASSWORD")
 
-    # --- Iniciar Playwright ---
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # headless=True si no querés ver la ventana
-        context = browser.new_context()
-        page = context.new_page()
+    if not all([url, username, password]):
+        raise ValueError(
+            "Faltan variables ARANCIA_URL, ARANCIA_USERNAME o ARANCIA_PASSWORD en el archivo .env"
+        )
 
-        # --- 1. Ingresar a la página ---
-        page.goto(ARANCIA_URL)
-        page.wait_for_load_state("networkidle")
+    return AranciaSettings(url=url, username=username, password=password)
 
-        # --- 2. Entrar a la web ---
-        page.click("#Button1")
-        page.wait_for_timeout(2000)
 
-        # --- 3. Iniciar sesión ---
-        page.fill("#TextBox1", ARANCIA_USERNAME)
-        page.fill("#TextBox2", ARANCIA_PASSWORD)
-        page.click("#Button1")
-        page.wait_for_load_state("networkidle")
+def _to_text(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    return str(value)
 
-        # --- 4. Ir al módulo de facturación ---
-        page.click("#Button10")
-        page.wait_for_timeout(2000)
 
-        # --- 5. Cambiar al frame "facturacion" ---
-        facturacion_frame = page.frame(name="facturacion")
-        facturacion_frame.click("#Button3")
-        page.wait_for_timeout(2000)
+class AranciaPlaywrightClient:
+    def __init__(self, page: Page, settings: AranciaSettings) -> None:
+        self.page = page
+        self.settings = settings
 
-        # --- 6. Cambiar al frame "marco" para cargar datos ---
-        marco_frame = page.frame(name="marco")
+    def login(self) -> None:
+        self.page.goto(self.settings.url, wait_until="domcontentloaded")
 
-        # --- 7. Iterar sobre el DataFrame y cargar los datos ---
+        if not self.page.locator("#TextBox1").is_visible():
+            enter_button = self.page.locator("#Button1")
+            if enter_button.count():
+                enter_button.first.click()
+
+        self.page.locator("#TextBox1").wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
+        self.page.locator("#TextBox1").fill(self.settings.username)
+        self.page.locator("#TextBox2").fill(self.settings.password)
+        self.page.locator("#Button1").click()
+        self.page.wait_for_load_state("networkidle")
+        self.page.locator("#Button10").click()
+        self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+
+    def upload_purchase_invoices(self, data: pd.DataFrame) -> None:
+        facturacion_frame = self._open_facturacion_module()
+        facturacion_frame.locator("#Button3").click()
+        self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+
+        marco_frame = self._wait_for_frame("marco")
+
         for index, row in data.iterrows():
-            marco_frame.fill('#DetailsView1_TextBox1', str(row['Fecha']))
-            marco_frame.fill('#DetailsView1_TextBox2', str(row['Fecha']))
-            marco_frame.fill('input[name="DetailsView1$ctl02"]', str(row['Tipo3']))
-            marco_frame.fill('input[name="DetailsView1$ctl03"]', str(row['Factura']))
-            marco_frame.fill('input[name="DetailsView1$ctl04"]', str(row['Proveedor']))
-            marco_frame.fill('input[name="DetailsView1$ctl05"]', str(row['CUIT']))
-            marco_frame.fill('input[name="DetailsView1$TextBox3"]', str(row['NETO 10.5']))
-            marco_frame.fill('input[name="DetailsView1$TextBox4"]', str(row['NETO 21']))
-            marco_frame.fill('input[name="DetailsView1$TextBox5"]', str(row['IVA 10.5']))
-            marco_frame.fill('input[name="DetailsView1$TextBox6"]', str(row['IVA 21']))
-            marco_frame.fill('input[name="DetailsView1$TextBox7"]', str(row['TOTAL_NO_GRAVADO']))
+            marco_frame.locator("#DetailsView1_TextBox1").fill(_to_text(row["Fecha"]))
+            marco_frame.locator("#DetailsView1_TextBox2").fill(_to_text(row["Fecha"]))
+            marco_frame.locator('input[name="DetailsView1$ctl02"]').fill(_to_text(row["Tipo3"]))
+            marco_frame.locator('input[name="DetailsView1$ctl03"]').fill(_to_text(row["Factura"]))
+            marco_frame.locator('input[name="DetailsView1$ctl04"]').fill(_to_text(row["Proveedor"]))
+            marco_frame.locator('input[name="DetailsView1$ctl05"]').fill(_to_text(row["CUIT"]))
+            marco_frame.locator('input[name="DetailsView1$TextBox3"]').fill(_to_text(row["NETO 10.5"]))
+            marco_frame.locator('input[name="DetailsView1$TextBox4"]').fill(_to_text(row["NETO 21"]))
+            marco_frame.locator('input[name="DetailsView1$TextBox5"]').fill(_to_text(row["IVA 10.5"]))
+            marco_frame.locator('input[name="DetailsView1$TextBox6"]').fill(_to_text(row["IVA 21"]))
+            marco_frame.locator('input[name="DetailsView1$TextBox7"]').fill(
+                _to_text(row["TOTAL_NO_GRAVADO"])
+            )
+            marco_frame.get_by_role("link", name="Agregar").click()
+            self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+            print(f"Fila de compra {index + 1} cargada correctamente.")
 
-            # Hacer clic en "Agregar"
-            marco_frame.click('text=Agregar')
-            page.wait_for_timeout(2000)  # Espera ligera para evitar duplicados
+    def upload_sales_invoices(self, data: pd.DataFrame) -> None:
+        facturacion_frame = self._open_facturacion_module()
+        facturacion_frame.locator("#Button5").click()
+        self.page.wait_for_timeout(DEFAULT_WAIT_MS)
 
-            print(f"✅ Fila {index+1} cargada correctamente")
+        marco_frame = self._wait_for_frame("marco")
 
-        # --- 8. Cierre del navegador ---
-        print("🎉 Carga finalizada correctamente.")
-        browser.close()
+        self._set_checkbox(marco_frame, "#CheckBoxList1_0", checked=False)
+        self._set_checkbox(marco_frame, "#CheckBoxList1_3", checked=True)
+        self._fill_and_commit(marco_frame, "#contar", "3")
 
-# --- FUNCION 2: CARGA DE VENTAS ---
+        for field_id, value in {"ivasa1": "0", "ivasa2": "10.5"}.items():
+            self._fill_and_commit(marco_frame, f"#{field_id}", value)
 
-def cargar_facturas_ventas(data: pd.DataFrame):
-    """
-    Carga facturas de ventas en el sistema Arancia utilizando Playwright.
-    Usa credenciales y URL desde el archivo .env
-    """
+        for index, row in data.iterrows():
+            self._fill_and_commit(marco_frame, "#total1", row["TOTAL_NO_GRAVADO"])
+            self._fill_and_commit(marco_frame, "#total2", row["TOTAL_10.5"])
+            self._fill_and_commit(marco_frame, '[name="total3"]', row["TOTAL_21"])
 
-    # --- Cargar variables de entorno ---
-    load_dotenv()
-    ARANCIA_URL = os.getenv("ARANCIA_URL")
-    ARANCIA_USERNAME = os.getenv("ARANCIA_USERNAME")
-    ARANCIA_PASSWORD = os.getenv("ARANCIA_PASSWORD")
+            marco_frame.locator("#Button2").click()
+            self.page.wait_for_timeout(DEFAULT_WAIT_MS)
 
-    if not all([ARANCIA_URL, ARANCIA_USERNAME, ARANCIA_PASSWORD]):
-        raise ValueError("Faltan variables ARANCIA_URL, ARANCIA_USERNAME o ARANCIA_PASSWORD en el archivo .env")
+            self._fill_and_commit(marco_frame, '[name="TextBox3"]', row["Cliente"])
+            self._fill_and_commit(marco_frame, '[name="TextBox4"]', row["CUIT"])
+            self._fill_and_commit(marco_frame, '[name="TextBox6"]', row["Factura"])
+            self._fill_and_commit(marco_frame, '[name="TextBox7"]', row["tipo3_new"])
 
-    # --- Iniciar Playwright ---
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+            fecha_input = marco_frame.locator('[name="TextBox8"]')
+            fecha_input.fill(_to_text(row["Fecha"]))
+            self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+
+            marco_frame.locator("#Button5").click()
+            self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+            print(f"Fila de venta {index + 1} cargada correctamente.")
+
+    def _open_facturacion_module(self) -> Frame:
+        self.page.wait_for_selector("iframe[name='facturacion']", timeout=DEFAULT_TIMEOUT_MS)
+        return self._wait_for_frame("facturacion")
+
+    def _wait_for_frame(self, name: str) -> Frame:
+        deadline = time.monotonic() + (DEFAULT_TIMEOUT_MS / 1000)
+
+        while time.monotonic() < deadline:
+            frame = self.page.frame(name=name)
+            if frame is not None:
+                return frame
+            self.page.wait_for_timeout(200)
+
+        raise TimeoutError(f"No se pudo obtener el iframe '{name}'.")
+
+    def _set_checkbox(self, frame: Frame, selector: str, *, checked: bool) -> None:
+        checkbox = frame.locator(selector)
+        checkbox.wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
+
+        if checkbox.is_checked() != checked:
+            checkbox.click()
+            self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+
+    def _fill_and_commit(self, frame: Frame, selector: str, value: object) -> None:
+        field = frame.locator(selector)
+        field.wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
+        field.click()
+        field.fill(_to_text(value))
+        field.press("Tab")
+        self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+
+
+def cargar_facturas_compra(data: pd.DataFrame, *, headless: bool = True) -> None:
+    if data.empty:
+        print("No hay facturas de compra pendientes para cargar.")
+        return
+
+    settings = load_arancia_settings()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=headless)
         context = browser.new_context()
         page = context.new_page()
 
-        # --- 1. Ingresar a la página ---
-        page.goto(ARANCIA_URL)
-        page.wait_for_load_state("networkidle")
+        client = AranciaPlaywrightClient(page, settings)
+        client.login()
+        client.upload_purchase_invoices(data)
 
-        # --- 2. Entrar a la web ---
-        page.click("#Button1")
-        page.wait_for_timeout(2000)
-
-        # --- 3. Iniciar sesión ---
-        page.fill("#TextBox1", ARANCIA_USERNAME)
-        page.fill("#TextBox2", ARANCIA_PASSWORD)
-        page.click("#Button1")
-        page.wait_for_load_state("networkidle")
-
-        # --- 4. Ir al módulo de facturación ---
-        page.click("#Button10")
-        page.wait_for_timeout(1500)
-
-        # --- 5. Cambiar al frame 'facturacion' y abrir la subpestaña de facturas de venta ---
-        facturacion_frame = page.frame(name="facturacion")
-        facturacion_frame.click("#Button5")
-        page.wait_for_timeout(1000)
-
-        # --- 6. Cambiar al frame 'marco' para cargar facturas ---
-        marco_frame = page.frame(name="marco")
-
-        # --- 7. Configurar checkboxes ---
-        marco_frame.click("#CheckBoxList1_0")  # Quitar “aéreo”
-        marco_frame.wait_for_timeout(1000)
-        marco_frame.click("#CheckBoxList1_3")  # Activar “manual”
-        marco_frame.wait_for_timeout(1000)
-
-        # --- 8. Campo de IVAS ---
-        marco_frame.fill("#contar", "3")
-        marco_frame.keyboard.press("Tab")
-        marco_frame.wait_for_timeout(1000)
-
-        # --- 9. Configurar IVAS específicos ---
-        valores = {
-            "ivasa1": "0",
-            "ivasa2": "10.5"
-        }
-
-        for field_id, valor in valores.items():
-            marco_frame.fill(f"#{field_id}", valor)
-            marco_frame.keyboard.press("Tab")
-            marco_frame.wait_for_timeout(1000)
-
-        # --- 10. Iterar sobre cada fila del DataFrame ---
-        for index, row in clean_data.iterrows():
-            print(f"➡️ Cargando fila {index + 1}...")
-
-            # TOTAL_NO_GRAVADO
-            marco_frame.fill("#total1", str(row["TOTAL_NO_GRAVADO"]))
-            marco_frame.keyboard.press("Tab")
-
-            # TOTAL_10.5
-            marco_frame.fill("#total2", str(row["TOTAL_10.5"]))
-            marco_frame.keyboard.press("Tab")
-
-            # TOTAL_21
-            marco_frame.fill('[name="total3"]', str(row["TOTAL_21"]))
-            marco_frame.keyboard.press("Tab")
-
-            # Click en botón para agregar factura
-            marco_frame.click("#Button2")
-            marco_frame.wait_for_timeout(2000)
-
-            # RAZON SOCIAL
-            marco_frame.fill('[name="TextBox3"]', str(row["Cliente"]))
-            marco_frame.keyboard.press("Tab")
-
-            # CUIT
-            marco_frame.fill('[name="TextBox4"]', str(row["CUIT"]))
-            marco_frame.keyboard.press("Tab")
-
-            # FACTURA NÚMERO
-            marco_frame.fill('[name="TextBox6"]', str(row["Factura"]))
-            marco_frame.keyboard.press("Tab")
-
-            # CLASE
-            marco_frame.fill('[name="TextBox7"]', str(row["tipo3_new"]))
-            marco_frame.keyboard.press("Tab")
-
-            # FECHA
-            marco_frame.fill('[name="TextBox8"]', str(row["Fecha"]))
-            marco_frame.wait_for_timeout(1000)
-
-            # GRABAR
-            marco_frame.click("#Button5")
-            marco_frame.wait_for_timeout(1500)
-
-            print(f"✅ Fila {index + 1} cargada correctamente.")
-
-        print("🎉 Carga de facturas finalizada con éxito.")
+        context.close()
         browser.close()
 
+    print("Carga de compras finalizada correctamente.")
 
-# --------------------------------------------------
+
+def cargar_facturas_ventas(data: pd.DataFrame, *, headless: bool = True) -> None:
+    if data.empty:
+        print("No hay facturas de venta pendientes para cargar.")
+        return
+
+    settings = load_arancia_settings()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=headless)
+        context = browser.new_context()
+        page = context.new_page()
+
+        client = AranciaPlaywrightClient(page, settings)
+        client.login()
+        client.upload_sales_invoices(data)
+
+        context.close()
+        browser.close()
+
+    print("Carga de ventas finalizada correctamente.")
