@@ -66,13 +66,14 @@ class AranciaPlaywrightClient:
         self.page.locator("#Button10").click()
         self.page.wait_for_timeout(DEFAULT_WAIT_MS)
 
-    def upload_purchase_invoices(self, data: pd.DataFrame) -> None:
+    def upload_purchase_invoices(self, data: pd.DataFrame) -> pd.DataFrame:
         facturacion_frame = self._open_facturacion_module()
         facturacion_frame.locator("#Button3").click()
         self.page.wait_for_timeout(DEFAULT_WAIT_MS)
 
         marco_frame = self._wait_for_frame("marco")
         total_rows = len(data)
+        uploaded_rows: list[dict[str, object]] = []
 
         for index, (_, row) in enumerate(data.iterrows(), start=1):
             marco_frame.locator("#DetailsView1_TextBox1").fill(_to_text(row["Fecha"]))
@@ -90,14 +91,18 @@ class AranciaPlaywrightClient:
             )
             marco_frame.get_by_role("link", name="Agregar").click()
             self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+            uploaded_rows.append(row.to_dict())
             _print_row_loaded("Compra", index, total_rows)
 
-    def upload_sales_invoices(self, data: pd.DataFrame) -> None:
+        return pd.DataFrame(uploaded_rows, columns=data.columns)
+
+    def upload_sales_invoices(self, data: pd.DataFrame) -> pd.DataFrame:
         facturacion_frame = self._open_facturacion_module()
         facturacion_frame.locator("#Button5").click()
         self.page.wait_for_timeout(DEFAULT_WAIT_MS)
 
         marco_frame = self._wait_for_frame("marco")
+        uploaded_rows: list[dict[str, object]] = []
 
         self._set_checkbox(marco_frame, "#CheckBoxList1_0", checked=False)
         self._set_checkbox(marco_frame, "#CheckBoxList1_3", checked=True)
@@ -126,7 +131,10 @@ class AranciaPlaywrightClient:
 
             marco_frame.locator("#Button5").click()
             self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+            uploaded_rows.append(row.to_dict())
             _print_row_loaded("Venta", index, total_rows)
+
+        return pd.DataFrame(uploaded_rows, columns=data.columns)
 
     def _open_facturacion_module(self) -> Frame:
         self.page.wait_for_selector("iframe[name='facturacion']", timeout=DEFAULT_TIMEOUT_MS)
@@ -160,10 +168,10 @@ class AranciaPlaywrightClient:
         self.page.wait_for_timeout(DEFAULT_WAIT_MS)
 
 
-def cargar_facturas_compra(data: pd.DataFrame, *, headless: bool = True) -> None:
+def cargar_facturas_compra(data: pd.DataFrame, *, headless: bool = True) -> pd.DataFrame:
     if data.empty:
         print("[OK] No hay facturas de compra pendientes para cargar.")
-        return
+        return data.iloc[0:0].copy()
 
     settings = load_arancia_settings()
 
@@ -174,18 +182,19 @@ def cargar_facturas_compra(data: pd.DataFrame, *, headless: bool = True) -> None
 
         client = AranciaPlaywrightClient(page, settings)
         client.login()
-        client.upload_purchase_invoices(data)
+        uploaded_data = client.upload_purchase_invoices(data)
 
         context.close()
         browser.close()
 
     print("[OK] Carga de compras finalizada.")
+    return uploaded_data
 
 
-def cargar_facturas_ventas(data: pd.DataFrame, *, headless: bool = True) -> None:
+def cargar_facturas_ventas(data: pd.DataFrame, *, headless: bool = True) -> pd.DataFrame:
     if data.empty:
         print("[OK] No hay facturas de venta pendientes para cargar.")
-        return
+        return data.iloc[0:0].copy()
 
     settings = load_arancia_settings()
 
@@ -196,9 +205,10 @@ def cargar_facturas_ventas(data: pd.DataFrame, *, headless: bool = True) -> None
 
         client = AranciaPlaywrightClient(page, settings)
         client.login()
-        client.upload_sales_invoices(data)
+        uploaded_data = client.upload_sales_invoices(data)
 
         context.close()
         browser.close()
 
     print("[OK] Carga de ventas finalizada.")
+    return uploaded_data

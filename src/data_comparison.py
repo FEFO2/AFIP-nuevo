@@ -58,7 +58,7 @@ def comparar_facturas_venta(afip_df, sistem_df, tolerancia=1.0):
     for factura in mal_cargadas["Factura"]:
         print(f"La factura {factura} no esta cargada correctamente (diferencia en totales).")
 
-    resultado = merged.loc[~merged["loaded"], a.columns[:9]].copy()
+    resultado = merged.loc[~merged["loaded"], a.columns].copy()
 
     _print_comparison_summary(
         total_afip=len(a),
@@ -114,7 +114,7 @@ def comparar_facturas_compra(afip_df, sistem_df, tolerancia=1.0):
     for factura in mal_cargadas["Factura"]:
         print(f"La factura {factura} no esta cargada correctamente (diferencia en totales).")
 
-    resultado = merged.loc[~merged["loaded"], a.columns[:13]].copy()
+    resultado = merged.loc[~merged["loaded"], a.columns].copy()
 
     _print_comparison_summary(
         total_afip=len(a),

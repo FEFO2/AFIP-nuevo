@@ -49,8 +49,14 @@ def main() -> int:
     from data_upload import cargar_facturas_compra, cargar_facturas_ventas
     from download_afip_reports import run_download_afip_reports
     from download_bookit_reports import run_download_arancia_reports
+    from report_generator import generate_sales_report
     from utils import clear_downloads_dir
-    from workflows import build_purchase_upload_data, build_sales_upload_data
+    from workflows import (
+        build_purchase_month_report_data,
+        build_purchase_upload_data,
+        build_sales_month_report_data,
+        build_sales_upload_data,
+    )
 
     _print_section("Descarga de Archivos")
     if not args.skip_downloads:
@@ -66,17 +72,24 @@ def main() -> int:
     _print_section("Comparacion de Facturas")
     purchase_data = None
     sales_data = None
+    uploaded_sales_data = None
+    purchase_month_report_data = None
+    sales_month_report_data = None
     next_step = 4
 
     if args.mode in {"todo", "compras"}:
         _print_step(next_step, "Comparando facturas de compra...")
         purchase_data = build_purchase_upload_data(tolerance=args.tolerance)
+        purchase_month_report_data = build_purchase_month_report_data()
         _print_result("Facturas de compra pendientes", len(purchase_data))
         next_step += 1
 
     if args.mode in {"todo", "ventas"}:
         _print_step(next_step, "Comparando facturas de venta...")
         sales_data = build_sales_upload_data(tolerance=args.tolerance)
+        sales_month_report_data = build_sales_month_report_data()
+        if purchase_month_report_data is None:
+            purchase_month_report_data = build_purchase_month_report_data()
         _print_result("Facturas de venta pendientes", len(sales_data))
         next_step += 1
 
@@ -88,7 +101,22 @@ def main() -> int:
 
     if sales_data is not None:
         _print_step(next_step, "Cargando facturas de venta pendientes...")
-        cargar_facturas_ventas(sales_data, headless=not args.show_browser)
+        uploaded_sales_data = cargar_facturas_ventas(sales_data, headless=not args.show_browser)
+        next_step += 1
+
+    if (
+        uploaded_sales_data is not None
+        and sales_month_report_data is not None
+        and purchase_month_report_data is not None
+    ):
+        _print_section("Informe HTML")
+        _print_step(next_step, "Generando informe de facturacion...")
+        report_path = generate_sales_report(
+            loaded_sales_data=uploaded_sales_data,
+            monthly_sales_data=sales_month_report_data,
+            monthly_purchase_data=purchase_month_report_data,
+        )
+        print(f"[OK] Informe generado en {report_path}")
 
     _print_section("Proceso Finalizado")
     print("[OK] Flujo completado.")
