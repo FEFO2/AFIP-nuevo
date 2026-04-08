@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 
 from dotenv import load_dotenv
 from playwright.sync_api import Playwright, sync_playwright
 
-from utils import ensure_downloads_dir
+from utils import browser_mode_label, configure_logging, ensure_downloads_dir
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_required_env(name: str) -> str:
@@ -29,11 +33,13 @@ def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
         ("#btnEmitidos", "comprobantes_emitidos.xlsx"),
     ]
 
+    logger.info("AFIP: iniciando automatizacion con navegador %s.", browser_mode_label(headless))
     browser = playwright.chromium.launch(headless=headless)
     context = browser.new_context()
     page = context.new_page()
 
     try:
+        logger.info("AFIP: abriendo portal e iniciando sesion.")
         page.goto(url)
         page.get_by_role("spinbutton").click()
         page.get_by_role("spinbutton").fill(cuit)
@@ -48,8 +54,10 @@ def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
             page.get_by_role("button", name="MIS COMPROBANTES Consulta de").click()
         popup = popup_info.value
         popup.get_by_role("link", name=re.compile("ARANCIA SERVICES")).click()
+        logger.info("AFIP: acceso a MIS COMPROBANTES confirmado.")
 
         for index, (button_id, file_name) in enumerate(comprobantes):
+            logger.info("AFIP: preparando descarga de %s.", file_name)
             popup.wait_for_load_state("networkidle")
             button = popup.locator(button_id)
             button.wait_for(state="visible", timeout=30_000)
@@ -68,6 +76,7 @@ def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
             target_path = downloads_dir / file_name
             download.save_as(str(target_path))
             print(f"[OK] AFIP: archivo descargado en {target_path}")
+            logger.info("AFIP: archivo guardado en %s", target_path)
 
             if index == 0:
                 menu_principal = popup.locator("a[href='menuPrincipal.do']")
@@ -77,6 +86,7 @@ def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
     finally:
         context.close()
         browser.close()
+        logger.info("AFIP: navegador cerrado.")
 
 
 def run_download_afip_reports(*, headless: bool = True) -> None:
@@ -85,6 +95,7 @@ def run_download_afip_reports(*, headless: bool = True) -> None:
 
 
 def main() -> int:
+    configure_logging()
     run_download_afip_reports()
     return 0
 

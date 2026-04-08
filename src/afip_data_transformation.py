@@ -101,6 +101,13 @@ def transform_afip_inbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
     transformed["IMPUESTOS"] = transformed["Otros Tributos"]
     transformed["NETO 0"] = transformed["Neto Grav. IVA 0%"]
 
+    transformed["TOTAL_NO_GRAVADO"] = (
+        transformed["NO GRAVADO"]
+        + transformed["EXENTO"]
+        + transformed["IMPUESTOS"]
+        + transformed["NETO 0"]
+    )
+
     _fill_amount_columns(transformed, PURCHASE_AMOUNT_COLUMNS)
     _apply_exchange_rate(transformed, PURCHASE_EXCHANGE_RATE_COLUMNS)
 

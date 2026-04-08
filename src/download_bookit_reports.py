@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 
 from dotenv import load_dotenv
 from playwright.sync_api import Frame, Playwright, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
-from utils import ensure_downloads_dir
+from utils import browser_mode_label, configure_logging, ensure_downloads_dir
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_required_env(name: str) -> str:
@@ -64,11 +68,13 @@ def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -
     password = _get_required_env("ARANCIA_PASSWORD")
     downloads_dir = ensure_downloads_dir()
 
+    logger.info("Bookit: iniciando automatizacion con navegador %s.", browser_mode_label(headless))
     browser = playwright.chromium.launch(headless=headless)
     context = browser.new_context()
     page = context.new_page()
 
     try:
+        logger.info("Bookit: abriendo portal e iniciando sesion.")
         page.goto(url)
 
         if not page.locator("#TextBox1").is_visible():
@@ -87,6 +93,7 @@ def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -
         else:
             page.get_by_role("button", name="Facturacion").click()
         page.wait_for_timeout(1_000)
+        logger.info("Bookit: modulo de facturacion abierto.")
 
         frame_facturacion = _wait_for_frame(page, "facturacion")
         if frame_facturacion.get_by_role("button", name="Afip").count():
@@ -120,10 +127,12 @@ def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -
         inbound_path.write_text(html_inbound, encoding="utf-8")
 
         print(f"[OK] Bookit: archivos guardados en {outbound_path} y {inbound_path}")
+        logger.info("Bookit: archivos guardados en %s y %s", outbound_path, inbound_path)
         return html_outbound, html_inbound
     finally:
         context.close()
         browser.close()
+        logger.info("Bookit: navegador cerrado.")
 
 
 def run_download_arancia_reports(*, headless: bool = True) -> tuple[str, str]:
@@ -132,6 +141,7 @@ def run_download_arancia_reports(*, headless: bool = True) -> tuple[str, str]:
 
 
 def main() -> int:
+    configure_logging()
     run_download_arancia_reports()
     return 0
 
