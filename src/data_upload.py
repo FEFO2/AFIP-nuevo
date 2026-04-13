@@ -135,13 +135,15 @@ class AranciaPlaywrightClient:
         marco_frame = self._wait_for_child_frame(
             facturacion_frame,
             "marco",
-            required_selector="#contar",
+            required_selector="#CheckBoxList1_0",
         )
         uploaded_rows: list[dict[str, object]] = []
 
         self._set_checkbox(marco_frame, "#CheckBoxList1_0", checked=False)
         self._set_checkbox(marco_frame, "#CheckBoxList1_3", checked=True)
+        self._wait_for_visible_selector(marco_frame, "#contar")
         self._fill_and_commit(marco_frame, "#contar", "3")
+        self._wait_for_visible_selector(marco_frame, "#ivasa1")
 
         for field_id, value in {"ivasa1": "0", "ivasa2": "10.5"}.items():
             self._fill_and_commit(marco_frame, f"#{field_id}", value)
@@ -159,7 +161,7 @@ class AranciaPlaywrightClient:
             self._fill_and_commit(marco_frame, '[name="total3"]', row["TOTAL_21"])
 
             marco_frame.locator("#Button2").click()
-            self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+            self._wait_for_visible_selector(marco_frame, "#Button5")
 
             self._fill_and_commit(marco_frame, '[name="TextBox3"]', row["Cliente"])
             self._fill_and_commit(marco_frame, '[name="TextBox4"]', row["CUIT"])
@@ -167,7 +169,7 @@ class AranciaPlaywrightClient:
             self._fill_and_commit(marco_frame, '[name="TextBox7"]', row["tipo3_new"])
 
             fecha_input = marco_frame.locator('[name="TextBox8"]')
-            fecha_input.fill(_to_text(row["Fecha"]))
+            fecha_input.fill(_to_date_input_value(row["Fecha"]))
             self.page.wait_for_timeout(DEFAULT_WAIT_MS)
 
             marco_frame.locator("#Button5").click()
@@ -244,6 +246,9 @@ class AranciaPlaywrightClient:
         if checkbox.is_checked() != checked:
             checkbox.click()
             self.page.wait_for_timeout(DEFAULT_WAIT_MS)
+
+    def _wait_for_visible_selector(self, frame: Frame, selector: str) -> None:
+        frame.locator(selector).wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
 
     def _fill_and_commit(self, frame: Frame, selector: str, value: object) -> None:
         field = frame.locator(selector)
