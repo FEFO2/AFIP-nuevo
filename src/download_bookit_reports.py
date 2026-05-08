@@ -11,6 +11,10 @@ from utils import browser_mode_label, configure_logging, ensure_downloads_dir
 
 
 logger = logging.getLogger(__name__)
+PERIOD_OPTION_INDEX = {
+    "current": 0,
+    "previous": 1,
+}
 
 
 def _get_required_env(name: str) -> str:
@@ -18,6 +22,41 @@ def _get_required_env(name: str) -> str:
     if not value:
         raise EnvironmentError(f"Missing environment variable: {name}")
     return value
+
+
+def _select_period_option(frame: Frame, *, period: str) -> None:
+    if period not in PERIOD_OPTION_INDEX:
+        raise ValueError(f"Periodo Bookit no soportado: {period}")
+
+    dropdown = frame.locator("#DropDownList1")
+    dropdown.wait_for(state="visible", timeout=30_000)
+    options = dropdown.locator("option")
+    option_count = options.count()
+    target_index = PERIOD_OPTION_INDEX[period]
+
+    if option_count <= target_index:
+        raise ValueError(
+            f"Bookit: la lista #DropDownList1 tiene {option_count} opcion(es); "
+            f"no alcanza para seleccionar el periodo '{period}'."
+        )
+
+    target_option = options.nth(target_index)
+    target_value = target_option.get_attribute("value")
+    target_label = (target_option.text_content() or "").strip()
+
+    if target_value is None:
+        raise ValueError(
+            f"Bookit: la opcion en posicion {target_index + 1} no tiene atributo value."
+        )
+
+    logger.info(
+        "Bookit: seleccionando periodo '%s' con la opcion %s de #DropDownList1 (%s).",
+        period,
+        target_index + 1,
+        target_label or target_value,
+    )
+    dropdown.select_option(value=target_value)
+    frame.page.wait_for_timeout(1_000)
 
 
 def _wait_for_frame(page, name: str, timeout_ms: int = 30_000) -> Frame:
@@ -60,7 +99,12 @@ def _wait_for_child_frame(
     raise TimeoutError(f"No se pudo obtener el iframe hijo '{name}'.")
 
 
-def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -> tuple[str, str]:
+def download_arancia_reports(
+    playwright: Playwright,
+    *,
+    headless: bool = True,
+    period: str = "current",
+) -> tuple[str, str]:
     load_dotenv()
 
     url = _get_required_env("ARANCIA_URL")
@@ -68,7 +112,11 @@ def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -
     password = _get_required_env("ARANCIA_PASSWORD")
     downloads_dir = ensure_downloads_dir()
 
-    logger.info("Bookit: iniciando automatizacion con navegador %s.", browser_mode_label(headless))
+    logger.info(
+        "Bookit: iniciando automatizacion con navegador %s para el periodo '%s'.",
+        browser_mode_label(headless),
+        period,
+    )
     browser = playwright.chromium.launch(headless=headless)
     context = browser.new_context()
     page = context.new_page()
@@ -108,13 +156,7 @@ def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -
             required_selector="#DropDownList1",
         )
 
-        selected_option = frame_marco.locator("#DropDownList1").locator("option[selected]").get_attribute(
-            "value"
-        )
-        if selected_option:
-            frame_marco.locator("#DropDownList1").select_option(selected_option)
-
-        page.wait_for_timeout(1_000)
+        _select_period_option(frame_marco, period=period)
         html_outbound = frame_marco.evaluate("() => document.documentElement.outerHTML")
 
         frame_marco.get_by_role("radio", name="COMPRAS DEL MES").check()
@@ -135,9 +177,13 @@ def download_arancia_reports(playwright: Playwright, *, headless: bool = True) -
         logger.info("Bookit: navegador cerrado.")
 
 
-def run_download_arancia_reports(*, headless: bool = True) -> tuple[str, str]:
+def run_download_arancia_reports(
+    *,
+    headless: bool = True,
+    period: str = "current",
+) -> tuple[str, str]:
     with sync_playwright() as playwright:
-        return download_arancia_reports(playwright, headless=headless)
+        return download_arancia_reports(playwright, headless=headless, period=period)
 
 
 def main() -> int:

@@ -11,6 +11,10 @@ from utils import browser_mode_label, configure_logging, ensure_downloads_dir
 
 
 logger = logging.getLogger(__name__)
+PERIOD_LABELS = {
+    "current": "Este mes",
+    "previous": "Mes pasado",
+}
 
 
 def _get_required_env(name: str) -> str:
@@ -20,20 +24,33 @@ def _get_required_env(name: str) -> str:
     return value
 
 
-def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
+def download_reports(
+    playwright: Playwright,
+    *,
+    headless: bool = True,
+    period: str = "current",
+) -> None:
     load_dotenv()
+
+    if period not in PERIOD_LABELS:
+        raise ValueError(f"Periodo AFIP no soportado: {period}")
 
     url = _get_required_env("AFIP_URL")
     cuit = _get_required_env("AFIP_USERNAME")
     password = _get_required_env("AFIP_PASSWORD")
     downloads_dir = ensure_downloads_dir()
+    period_label = PERIOD_LABELS[period]
 
     comprobantes = [
         ("#btnRecibidos", "comprobantes_recibidos.xlsx"),
         ("#btnEmitidos", "comprobantes_emitidos.xlsx"),
     ]
 
-    logger.info("AFIP: iniciando automatizacion con navegador %s.", browser_mode_label(headless))
+    logger.info(
+        "AFIP: iniciando automatizacion con navegador %s para el periodo '%s'.",
+        browser_mode_label(headless),
+        period,
+    )
     browser = playwright.chromium.launch(headless=headless)
     context = browser.new_context()
     page = context.new_page()
@@ -66,7 +83,7 @@ def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
 
             popup.wait_for_load_state("networkidle")
             popup.get_by_role("textbox", name="Fecha del Comprobante *").click()
-            popup.get_by_text("Este mes").click()
+            popup.get_by_text(period_label).click()
             popup.get_by_role("button", name="Buscar").click()
 
             with popup.expect_download() as download_info:
@@ -89,9 +106,9 @@ def download_reports(playwright: Playwright, *, headless: bool = True) -> None:
         logger.info("AFIP: navegador cerrado.")
 
 
-def run_download_afip_reports(*, headless: bool = True) -> None:
+def run_download_afip_reports(*, headless: bool = True, period: str = "current") -> None:
     with sync_playwright() as playwright:
-        download_reports(playwright, headless=headless)
+        download_reports(playwright, headless=headless, period=period)
 
 
 def main() -> int:

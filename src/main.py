@@ -22,6 +22,12 @@ def main() -> int:
         description="Descarga, compara y carga comprobantes usando Playwright de punta a punta."
     )
     parser.add_argument(
+        "--period",
+        choices=["current", "previous"],
+        default="current",
+        help="Indica si las descargas deben tomar comprobantes del mes actual o del mes pasado.",
+    )
+    parser.add_argument(
         "--mode",
         choices=["todo", "compras", "ventas"],
         default="todo",
@@ -65,7 +71,8 @@ def main() -> int:
 
     upload_headless = not args.show_browser
     logger.info(
-        "Inicio del flujo | mode=%s | skip_downloads=%s | navegador en cargas=%s | tolerance=%s",
+        "Inicio del flujo | period=%s | mode=%s | skip_downloads=%s | navegador en cargas=%s | tolerance=%s",
+        args.period,
         args.mode,
         args.skip_downloads,
         browser_mode_label(upload_headless),
@@ -79,10 +86,10 @@ def main() -> int:
         clear_downloads_dir()
         _print_step(2, "Descargando comprobantes desde AFIP...")
         logger.info("Iniciando descarga de comprobantes desde AFIP.")
-        run_download_afip_reports()
+        run_download_afip_reports(period=args.period)
         _print_step(3, "Descargando reportes desde Arancia/Bookit...")
         logger.info("Iniciando descarga de reportes desde Arancia/Bookit.")
-        run_download_arancia_reports()
+        run_download_arancia_reports(period=args.period)
     else:
         _print_step(1, "Reutilizando archivos existentes en downloads (--skip-downloads).")
         logger.info("Se reutilizan archivos existentes en downloads.")
