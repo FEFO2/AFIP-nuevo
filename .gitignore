@@ -3,3 +3,4 @@ downloads/
 .env
 __pycache__/
 *.pyc
+bot_newsan/newsan_auth_state.json

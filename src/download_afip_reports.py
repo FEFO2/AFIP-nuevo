@@ -5,9 +5,16 @@ import os
 import re
 
 from dotenv import load_dotenv
-from playwright.sync_api import Playwright, sync_playwright
+from playwright.sync_api import Playwright, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
-from utils import browser_mode_label, configure_logging, ensure_downloads_dir
+from utils import (
+    browser_mode_label,
+    configure_logging,
+    ensure_downloads_dir,
+    pause_for_manual_mode,
+    PlaywrightTimeoutConfig,
+    get_playwright_timeout_config,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -24,13 +31,34 @@ def _get_required_env(name: str) -> str:
     return value
 
 
+def _open_afip_login(page, url: str, *, timeout_config: PlaywrightTimeoutConfig) -> None:
+    try:
+        page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=timeout_config.navigation_timeout_ms,
+        )
+    except PlaywrightTimeoutError:
+        logger.warning(
+            "AFIP: la navegacion al login no completo a tiempo, pero se verificara si el formulario quedo disponible."
+        )
+
+    page.get_by_role("spinbutton").wait_for(
+        state="visible",
+        timeout=timeout_config.action_timeout_ms,
+    )
+
+
 def download_reports(
     playwright: Playwright,
     *,
     headless: bool = True,
     period: str = "current",
+    manual_on_error: bool = False,
+    timeout_config: PlaywrightTimeoutConfig | None = None,
 ) -> None:
     load_dotenv()
+    timeout_config = timeout_config or get_playwright_timeout_config()
 
     if period not in PERIOD_LABELS:
         raise ValueError(f"Periodo AFIP no soportado: {period}")
@@ -52,20 +80,25 @@ def download_reports(
         period,
     )
     browser = playwright.chromium.launch(headless=headless)
-    context = browser.new_context()
+    context = browser.new_context(accept_downloads=True)
+    context.set_default_timeout(timeout_config.action_timeout_ms)
+    context.set_default_navigation_timeout(timeout_config.navigation_timeout_ms)
     page = context.new_page()
 
     try:
         logger.info("AFIP: abriendo portal e iniciando sesion.")
-        page.goto(url)
+        _open_afip_login(page, url, timeout_config=timeout_config)
         page.get_by_role("spinbutton").click()
         page.get_by_role("spinbutton").fill(cuit)
         page.get_by_role("button", name="Siguiente").click()
         page.get_by_role("textbox", name="TU CLAVE").fill(password)
         page.get_by_role("button", name="Ingresar").click()
 
-        page.get_by_role("link", name="Ver todos").wait_for(state="visible", timeout=30_000)
-        page.get_by_role("link", name="Ver todos").click(timeout=30_000)
+        page.get_by_role("link", name="Ver todos").wait_for(
+            state="visible",
+            timeout=timeout_config.action_timeout_ms,
+        )
+        page.get_by_role("link", name="Ver todos").click(timeout=timeout_config.action_timeout_ms)
 
         with page.expect_popup() as popup_info:
             page.get_by_role("button", name="MIS COMPROBANTES Consulta de").click()
@@ -77,7 +110,7 @@ def download_reports(
             logger.info("AFIP: preparando descarga de %s.", file_name)
             popup.wait_for_load_state("networkidle")
             button = popup.locator(button_id)
-            button.wait_for(state="visible", timeout=30_000)
+            button.wait_for(state="visible", timeout=timeout_config.action_timeout_ms)
             button.scroll_into_view_if_needed()
             button.click(force=True)
 
@@ -97,18 +130,41 @@ def download_reports(
 
             if index == 0:
                 menu_principal = popup.locator("a[href='menuPrincipal.do']")
-                menu_principal.wait_for(state="visible", timeout=30_000)
+                menu_principal.wait_for(
+                    state="visible",
+                    timeout=timeout_config.action_timeout_ms,
+                )
                 menu_principal.click(force=True)
                 popup.wait_for_load_state("networkidle")
+    except Exception as error:
+        pause_for_manual_mode(
+            enabled=manual_on_error,
+            headless=headless,
+            system_name="AFIP",
+            error=error,
+        )
+        raise
     finally:
         context.close()
         browser.close()
         logger.info("AFIP: navegador cerrado.")
 
 
-def run_download_afip_reports(*, headless: bool = True, period: str = "current") -> None:
+def run_download_afip_reports(
+    *,
+    headless: bool = True,
+    period: str = "current",
+    manual_on_error: bool = False,
+    timeout_config: PlaywrightTimeoutConfig | None = None,
+) -> None:
     with sync_playwright() as playwright:
-        download_reports(playwright, headless=headless, period=period)
+        download_reports(
+            playwright,
+            headless=headless,
+            period=period,
+            manual_on_error=manual_on_error,
+            timeout_config=timeout_config,
+        )
 
 
 def main() -> int:

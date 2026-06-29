@@ -57,6 +57,8 @@ python src/main.py --mode todo
 python src/main.py --mode compras
 python src/main.py --mode ventas
 python src/main.py --mode todo --skip-downloads
+python src/main.py --mode todo --skip-afip-downloads
+python src/main.py --mode todo --skip-arancia-downloads
 python src/main.py --mode compras --show-browser
 ```
 
@@ -84,6 +86,8 @@ python src/main.py --mode compras --show-browser
 
 ## Notas
 
-- Si usas `--skip-downloads`, el sistema reutiliza los archivos ya existentes en `downloads/`.
+- Si usas `--skip-downloads`, el sistema reutiliza todos los archivos ya existentes en `downloads/`.
+- Si usas `--skip-afip-downloads`, reutiliza solo los archivos de AFIP y vuelve a descargar Arancia/Bookit.
+- Si usas `--skip-arancia-downloads`, reutiliza solo los archivos de Arancia/Bookit y vuelve a descargar AFIP.
 - Si no hay facturas pendientes, el flujo termina sin cargar nada.
 - Los logs de consola muestran el avance por pasos.

@@ -57,6 +57,8 @@ python src/main.py --mode todo
 python src/main.py --mode compras
 python src/main.py --mode ventas
 python src/main.py --mode todo --skip-downloads
+python src/main.py --mode todo --skip-afip-downloads
+python src/main.py --mode todo --skip-arancia-downloads
 python src/main.py --mode compras --show-browser
 ```
 
@@ -84,6 +86,8 @@ python src/main.py --mode compras --show-browser
 
 ## Notes
 
-- If you use `--skip-downloads`, the workflow reuses existing files in `downloads/`.
+- If you use `--skip-downloads`, the workflow reuses all existing files in `downloads/`.
+- If you use `--skip-afip-downloads`, it reuses only the AFIP files and downloads Arancia/Bookit again.
+- If you use `--skip-arancia-downloads`, it reuses only the Arancia/Bookit files and downloads AFIP again.
 - If there are no pending invoices, the upload stage exits without submitting anything.
 - Console logs show the workflow progress step by step.
