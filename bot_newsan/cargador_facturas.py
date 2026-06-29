@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import code
@@ -78,20 +78,34 @@ def load_invoices(csv_path: Path) -> list[dict[str, Any]]:
         return invoices
 
 
+def _get_required_env(name: str, legacy_name: str | None = None) -> str:
+    value = os.getenv(name)
+    if value:
+        return value
+
+    if legacy_name:
+        legacy_value = os.getenv(legacy_name)
+        if legacy_value:
+            return legacy_value
+
+    legacy_hint = f" o {legacy_name}" if legacy_name else ""
+    raise ValueError(f"Falta la variable de entorno {name}{legacy_hint}.")
+
+
 def open_oracle(playwright: Playwright) -> tuple[Any, Any, Page]:
-    password = os.getenv("PGA_PASSWORD")
-    if not password:
-        raise ValueError("Falta la variable de entorno PGA_PASSWORD.")
+    url = _get_required_env("PGA_URL", "PAG_URL")
+    username = _get_required_env("PGA_USERNAME")
+    password = _get_required_env("PGA_PASSWORD")
 
     browser = playwright.chromium.launch(headless=False, slow_mo=1200)
     context = browser.new_context()
     page = context.new_page()
 
-    page.goto("https://hdqc.fa.us2.oraclecloud.com/")
-    page.get_by_role("textbox", name="Username").fill("pga@aranciatravel.com")
+    page.goto(url)
+    page.get_by_role("textbox", name="Username").fill(username)
     page.get_by_role("textbox", name="Password").fill(password)
     page.get_by_role("button", name="Next").click()
-    page.get_by_role("link", name="Página Inicial", exact=True).click()
+    page.get_by_role("link", name="PÃ¡gina Inicial", exact=True).click()
     page.get_by_role("link", name="Crear factura").click()
 
     return browser, context, page
@@ -205,13 +219,13 @@ def wait_for_manual_review(invoice: dict[str, Any], current_index: int, total_in
     print("Revisala y aceptala manualmente en la web.")
     while True:
         user_input = input(
-            "Cuando termines, presioná Enter para seguir con la siguiente, o escribí 'salir' para cortar: "
+            "Cuando termines, presionÃ¡ Enter para seguir con la siguiente, o escribÃ­ 'salir' para cortar: "
         ).strip().lower()
         if user_input == "":
             return True
         if user_input == "salir":
             return False
-        print("Entrada no válida. Usá Enter para continuar o 'salir' para detener el proceso.")
+        print("Entrada no vÃ¡lida. UsÃ¡ Enter para continuar o 'salir' para detener el proceso.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -301,3 +315,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
