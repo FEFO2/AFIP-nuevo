@@ -41,30 +41,36 @@ ARANCIA_PASSWORD=
 Main entrypoint:
 
 ```bash
+python -m bot_carga
+```
+
+Backward-compatible entrypoint:
+
+```bash
 python src/main.py
 ```
 
 Available options:
 
 ```bash
-python src/main.py --help
+python -m bot_carga --help
 ```
 
 Examples:
 
 ```bash
-python src/main.py --mode todo
-python src/main.py --mode compras
-python src/main.py --mode ventas
-python src/main.py --mode todo --skip-downloads
-python src/main.py --mode todo --skip-afip-downloads
-python src/main.py --mode todo --skip-arancia-downloads
-python src/main.py --mode compras --show-browser
+python -m bot_carga --mode todo
+python -m bot_carga --mode compras
+python -m bot_carga --mode ventas
+python -m bot_carga --mode todo --skip-downloads
+python -m bot_carga --mode todo --skip-afip-downloads
+python -m bot_carga --mode todo --skip-arancia-downloads
+python -m bot_carga --mode compras --show-browser
 ```
 
 ## Workflow
 
-`src/main.py` runs:
+`bot_carga/main.py` runs:
 
 1. Cleanup of the `downloads/` folder
 2. AFIP invoice download
@@ -75,14 +81,17 @@ python src/main.py --mode compras --show-browser
 
 ## Structure
 
-- `src/main.py`: main entrypoint
-- `src/download_afip_reports.py`: AFIP download
-- `src/download_bookit_reports.py`: Arancia/Bookit download
-- `src/afip_data_transformation.py`: AFIP file transformation
-- `src/bookit_data_transformation.py`: Arancia/Bookit HTML transformation
-- `src/data_comparison.py`: AFIP vs system comparison
-- `src/workflows.py`: pending dataset builders
-- `src/data_upload.py`: invoice upload to Arancia
+- `bot_carga/main.py`: main invoice-loading bot entrypoint
+- `bot_carga/download_afip_reports.py`: AFIP download
+- `bot_carga/download_bookit_reports.py`: Arancia/Bookit download
+- `bot_carga/afip_data_transformation.py`: AFIP file transformation
+- `bot_carga/bookit_data_transformation.py`: Arancia/Bookit HTML transformation
+- `bot_carga/data_comparison.py`: AFIP vs system comparison
+- `bot_carga/workflows.py`: pending dataset builders
+- `bot_carga/data_upload.py`: purchase and sales upload to Arancia
+- `bot_carga/report_generator.py`: HTML report generation
+- `bot_carga/utils.py`: shared workflow utilities
+- `src/*.py`: compatibility wrappers that forward to `bot_carga`
 
 ## Notes
 

@@ -41,30 +41,36 @@ ARANCIA_PASSWORD=
 Punto de entrada principal:
 
 ```bash
+python -m bot_carga
+```
+
+Compatibilidad con el entrypoint anterior:
+
+```bash
 python src/main.py
 ```
 
 Opciones disponibles:
 
 ```bash
-python src/main.py --help
+python -m bot_carga --help
 ```
 
 Ejemplos:
 
 ```bash
-python src/main.py --mode todo
-python src/main.py --mode compras
-python src/main.py --mode ventas
-python src/main.py --mode todo --skip-downloads
-python src/main.py --mode todo --skip-afip-downloads
-python src/main.py --mode todo --skip-arancia-downloads
-python src/main.py --mode compras --show-browser
+python -m bot_carga --mode todo
+python -m bot_carga --mode compras
+python -m bot_carga --mode ventas
+python -m bot_carga --mode todo --skip-downloads
+python -m bot_carga --mode todo --skip-afip-downloads
+python -m bot_carga --mode todo --skip-arancia-downloads
+python -m bot_carga --mode compras --show-browser
 ```
 
 ## Flujo
 
-`src/main.py` ejecuta:
+`bot_carga/main.py` ejecuta:
 
 1. Limpieza de la carpeta `downloads/`
 2. Descarga de comprobantes desde AFIP
@@ -75,14 +81,17 @@ python src/main.py --mode compras --show-browser
 
 ## Estructura
 
-- `src/main.py`: entrypoint principal
-- `src/download_afip_reports.py`: descarga de AFIP
-- `src/download_bookit_reports.py`: descarga de Arancia/Bookit
-- `src/afip_data_transformation.py`: transformacion de archivos AFIP
-- `src/bookit_data_transformation.py`: transformacion de HTML de Arancia/Bookit
-- `src/data_comparison.py`: comparacion entre AFIP y sistema
-- `src/workflows.py`: construccion de datasets pendientes
-- `src/data_upload.py`: carga de compras y ventas en Arancia
+- `bot_carga/main.py`: entrypoint principal del bot de carga
+- `bot_carga/download_afip_reports.py`: descarga de AFIP
+- `bot_carga/download_bookit_reports.py`: descarga de Arancia/Bookit
+- `bot_carga/afip_data_transformation.py`: transformacion de archivos AFIP
+- `bot_carga/bookit_data_transformation.py`: transformacion de HTML de Arancia/Bookit
+- `bot_carga/data_comparison.py`: comparacion entre AFIP y sistema
+- `bot_carga/workflows.py`: construccion de datasets pendientes
+- `bot_carga/data_upload.py`: carga de compras y ventas en Arancia
+- `bot_carga/report_generator.py`: generacion del informe HTML
+- `bot_carga/utils.py`: utilidades compartidas del flujo
+- `src/*.py`: wrappers de compatibilidad hacia `bot_carga`
 
 ## Notas
 

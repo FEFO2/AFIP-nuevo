@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from playwright.sync_api import Page, Playwright, sync_playwright
+from playwright.sync_api import Page, Playwright, TimeoutError as PlaywrightTimeoutError, sync_playwright
 
 
 load_dotenv()
@@ -105,8 +105,14 @@ def open_oracle(playwright: Playwright) -> tuple[Any, Any, Page]:
     page.get_by_role("textbox", name="Username").fill(username)
     page.get_by_role("textbox", name="Password").fill(password)
     page.get_by_role("button", name="Next").click()
-    page.get_by_role("link", name="PÃ¡gina Inicial", exact=True).click()
-    page.get_by_role("link", name="Crear factura").click()
+    page.wait_for_load_state("networkidle")
+
+    try:
+        page.get_by_role("link", name="Página Inicial", exact=True).click(timeout=10000)
+    except PlaywrightTimeoutError:
+        pass
+
+    page.get_by_role("link", name=re.compile(r"Crear factura", re.IGNORECASE)).click(timeout=60000)
 
     return browser, context, page
 
