@@ -7,6 +7,11 @@ import numpy as np
 import pandas as pd
 
 
+NUMBER_FROM_COLUMN = "N\u00famero Desde"
+ISSUER_NAME_COLUMN = "Denominaci\u00f3n Emisor"
+RECEIVER_NAME_COLUMN = "Denominaci\u00f3n Receptor"
+CREDIT_LABEL = "Cr\u00e9dito"
+
 PURCHASE_AMOUNT_COLUMNS = [
     "NETO 0",
     "NETO 10.5",
@@ -67,6 +72,34 @@ def _sanitize_text_column(series: pd.Series) -> pd.Series:
     return series.str.translate(str.maketrans("", "", string.punctuation))
 
 
+def _fix_mojibake_text(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+
+    fixed = value
+    for _ in range(2):
+        if "Ã" not in fixed and "Â" not in fixed:
+            break
+        try:
+            candidate = fixed.encode("latin-1").decode("utf-8")
+        except UnicodeError:
+            break
+        if candidate == fixed:
+            break
+        fixed = candidate
+    return fixed
+
+
+def _normalize_afip_dataframe(data: pd.DataFrame) -> pd.DataFrame:
+    normalized = data.rename(columns=lambda column: _fix_mojibake_text(str(column)).strip()).copy()
+
+    for column in ["Tipo", ISSUER_NAME_COLUMN, RECEIVER_NAME_COLUMN]:
+        if column in normalized.columns:
+            normalized[column] = normalized[column].map(_fix_mojibake_text)
+
+    return normalized
+
+
 def _fill_amount_columns(data: pd.DataFrame, columns: list[str]) -> None:
     for column in columns:
         data[column] = data[column].fillna(0)
@@ -78,18 +111,18 @@ def _apply_exchange_rate(data: pd.DataFrame, columns: list[str]) -> None:
 
 
 def transform_afip_inbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
-    transformed = data.copy()
+    transformed = _normalize_afip_dataframe(data)
 
     transformed["Tipo"] = transformed["Tipo"].astype("string").str[-9:]
     transformed["Tipo2"] = transformed["Tipo"].str[:7]
     transformed["Tipo3"] = transformed["Tipo"].str[-1:]
 
     transformed["Punto de Venta"] = transformed["Punto de Venta"].astype(str).str.zfill(5)
-    transformed["NÃºmero Desde"] = transformed["NÃºmero Desde"].astype(str).str.zfill(8)
-    transformed["Factura"] = transformed["Punto de Venta"] + "-" + transformed["NÃºmero Desde"]
+    transformed[NUMBER_FROM_COLUMN] = transformed[NUMBER_FROM_COLUMN].astype(str).str.zfill(8)
+    transformed["Factura"] = transformed["Punto de Venta"] + "-" + transformed[NUMBER_FROM_COLUMN]
 
-    transformed["DenominaciÃ³n Emisor"] = _sanitize_text_column(transformed["DenominaciÃ³n Emisor"])
-    transformed["Proveedor"] = transformed["DenominaciÃ³n Emisor"].str[:35]
+    transformed[ISSUER_NAME_COLUMN] = _sanitize_text_column(transformed[ISSUER_NAME_COLUMN])
+    transformed["Proveedor"] = transformed[ISSUER_NAME_COLUMN].str[:35]
     transformed["CUIT"] = transformed["Nro. Doc. Emisor"].astype(str)
 
     transformed["NETO 10.5"] = transformed["Neto Grav. IVA 10,5%"]
@@ -118,12 +151,11 @@ def transform_afip_inbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
         + transformed["NETO 0"]
     )
 
-    for column in ["NETO 10.5", "IVA 10.5", "NETO 21", "IVA 21"]:
-        transformed[column] = transformed[column].astype(str)
-
-    credit_mask = transformed["Tipo2"] == "CrÃ©dito"
+    credit_mask = transformed["Tipo2"] == CREDIT_LABEL
     for column in PURCHASE_AMOUNT_COLUMNS:
         transformed.loc[credit_mask, column] = -transformed.loc[credit_mask, column].astype(float)
+
+    for column in ["NETO 10.5", "IVA 10.5", "NETO 21", "IVA 21", "TOTAL_NO_GRAVADO"]:
         transformed[column] = transformed[column].astype(str)
 
     return transformed[
@@ -173,7 +205,7 @@ def build_afip_inbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
-    transformed = data.copy()
+    transformed = _normalize_afip_dataframe(data)
 
     transformed["codigo_fc"] = [int(re.match(r"(\d+)", value).group(1)) for value in transformed["Tipo"]]
     transformed["Tipo"] = transformed["Tipo"].astype("string").str[-9:]
@@ -200,12 +232,12 @@ def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
     transformed["tipo3_new"] = np.where(transformed["codigo_fc"].isin([6, 8]), "B", transformed["tipo3_new"])
 
     transformed["Punto de Venta"] = transformed["Punto de Venta"].astype(str).str.zfill(5)
-    transformed["NÃºmero Desde"] = transformed["NÃºmero Desde"].astype(str).str.zfill(8)
-    transformed["FacturaReporte"] = transformed["Punto de Venta"] + "-" + transformed["NÃºmero Desde"]
-    transformed["Factura"] = transformed["NÃºmero Desde"].astype(int)
+    transformed[NUMBER_FROM_COLUMN] = transformed[NUMBER_FROM_COLUMN].astype(str).str.zfill(8)
+    transformed["FacturaReporte"] = transformed["Punto de Venta"] + "-" + transformed[NUMBER_FROM_COLUMN]
+    transformed["Factura"] = transformed[NUMBER_FROM_COLUMN].astype(int)
 
-    transformed["DenominaciÃ³n Receptor"] = _sanitize_text_column(transformed["DenominaciÃ³n Receptor"])
-    transformed["Cliente"] = transformed["DenominaciÃ³n Receptor"].str[:35]
+    transformed[RECEIVER_NAME_COLUMN] = _sanitize_text_column(transformed[RECEIVER_NAME_COLUMN])
+    transformed["Cliente"] = transformed[RECEIVER_NAME_COLUMN].str[:35]
     transformed["CUIT"] = transformed["Nro. Doc. Receptor"].astype(str)
 
     transformed["NETO 10.5"] = transformed["Neto Grav. IVA 10,5%"]
@@ -236,12 +268,11 @@ def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
         + transformed["NETO 0"]
     )
 
-    for column in ["NETO 10.5", "IVA 10.5", "NETO 21", "IVA 21", "TOTAL_21", "TOTAL_10.5"]:
-        transformed[column] = transformed[column].astype(str)
-
     credit_mask = (transformed["tipo2_new"] == "Credito") | (transformed["tipo2_new"] == "Pyme_nc")
     for column in SALES_AMOUNT_COLUMNS:
         transformed.loc[credit_mask, column] = -transformed.loc[credit_mask, column].astype(float)
+
+    for column in ["NETO 10.5", "IVA 10.5", "NETO 21", "IVA 21", "TOTAL_21", "TOTAL_10.5", "TOTAL_NO_GRAVADO"]:
         transformed[column] = transformed[column].astype(str)
 
     return transformed[
@@ -261,7 +292,7 @@ def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_afip_outbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
-    transformed = data.copy()
+    transformed = _normalize_afip_dataframe(data)
 
     transformed["codigo_fc"] = [int(re.match(r"(\d+)", value).group(1)) for value in transformed["Tipo"]]
     transformed["Tipo"] = transformed["Tipo"].astype("string").str[-9:]
@@ -283,9 +314,9 @@ def build_afip_outbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
     )
 
     transformed["Punto de Venta"] = transformed["Punto de Venta"].astype(str).str.zfill(5)
-    transformed["NÃºmero Desde"] = transformed["NÃºmero Desde"].astype(str).str.zfill(8)
-    transformed["FacturaReporte"] = transformed["Punto de Venta"] + "-" + transformed["NÃºmero Desde"]
-    transformed["Factura"] = transformed["NÃºmero Desde"].astype(int).astype(str)
+    transformed[NUMBER_FROM_COLUMN] = transformed[NUMBER_FROM_COLUMN].astype(str).str.zfill(8)
+    transformed["FacturaReporte"] = transformed["Punto de Venta"] + "-" + transformed[NUMBER_FROM_COLUMN]
+    transformed["Factura"] = transformed[NUMBER_FROM_COLUMN].astype(int).astype(str)
 
     transformed["NETO 10.5"] = transformed["Neto Grav. IVA 10,5%"]
     transformed["IVA 10.5"] = transformed["IVA 10,5%"]
@@ -340,4 +371,3 @@ def build_afip_outbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
             "TOTAL_FACTURADO",
         ]
     ].copy()
-

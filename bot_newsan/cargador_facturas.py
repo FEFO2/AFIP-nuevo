@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent
 CSV_PATH = BASE_DIR / "salida_csv" / "facturas_extraidas.csv"
 UNIDAD_NEGOCIO = "pga"
 PROVEEDOR = "arancia"
-SOLICITANTE = "jorba"
+SOLICITANTE = "JORBA, AGUSTINA"
 CLASIFICACION_FISCAL = "001_FACTURA_A"
 FINAL_ACTIONS = {"manual", "cancelar"}
 POST_SAVE_CONTINUE_SELECTOR = (
@@ -217,7 +217,34 @@ def prepare_next_invoice_after_manual_save(page: Page) -> None:
     next_invoice_button.click()
 
 
+def show_manual_review_alert(invoice_number: str, current_index: int, total_invoices: int) -> None:
+    """Muestra un aviso visible cuando una factura queda lista para revisar."""
+    message = (
+        f"La factura {invoice_number} esta lista para revisar en PGA "
+        f"({current_index}/{total_invoices}).\n\n"
+        "Cierra este aviso, revisala y aceptala manualmente en el navegador."
+    )
+
+    if os.name == "nt":
+        # Aviso nativo, en primer plano, sin dependencias adicionales.
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(  # type: ignore[attr-defined]
+            0,
+            message,
+            "Revision de factura pendiente",
+            0x40 | 0x10000 | 0x40000,  # Informacion + primer plano + topmost.
+        )
+    else:
+        print("\a", end="", flush=True)
+
+
 def wait_for_manual_review(invoice: dict[str, Any], current_index: int, total_invoices: int) -> bool:
+    show_manual_review_alert(
+        invoice["numero_comprobante"],
+        current_index=current_index,
+        total_invoices=total_invoices,
+    )
     print(
         f"\nFactura {invoice['numero_comprobante']} lista para revisar en PGA "
         f"({current_index}/{total_invoices})."
