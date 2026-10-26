@@ -8,7 +8,6 @@ import pandas as pd
 
 from .utils import ensure_downloads_dir
 
-
 INVOICE_TYPES = {"Factura", "Pyme_fc"}
 CREDIT_TYPES = {"Credito", "Pyme_nc"}
 
@@ -50,7 +49,9 @@ def _build_month_difference_summary(
     monthly_sales_data: pd.DataFrame,
     monthly_purchase_data: pd.DataFrame,
 ) -> dict[str, str]:
-    difference_iva_21 = _safe_sum(monthly_sales_data, "IVA 21") - _safe_sum(monthly_purchase_data, "IVA 21")
+    difference_iva_21 = _safe_sum(monthly_sales_data, "IVA 21") - _safe_sum(
+        monthly_purchase_data, "IVA 21"
+    )
     difference_iva_10_5 = _safe_sum(monthly_sales_data, "IVA 10.5") - _safe_sum(
         monthly_purchase_data, "IVA 10.5"
     )
@@ -65,7 +66,9 @@ def _build_month_difference_summary(
     taxable_base_10_5 = difference_iva_10_5 / 0.105 if difference_iva_10_5 else 0.0
 
     # Supuesto segun el ejemplo compartido por el usuario.
-    missing_non_taxed_amount = difference_facturacion - max(taxable_base_21, 0) - max(taxable_base_10_5, 0)
+    missing_non_taxed_amount = (
+        difference_facturacion - max(taxable_base_21, 0) - max(taxable_base_10_5, 0)
+    )
 
     return {
         "Diferencia IVA 21": _format_amount(difference_iva_21),
@@ -112,7 +115,9 @@ def generate_sales_report(
 ) -> Path:
     output_file = output_path or ensure_downloads_dir() / "informe_facturacion.html"
 
-    loaded_keys = set(_get_report_key_series(loaded_sales_data)) if not loaded_sales_data.empty else set()
+    loaded_keys = (
+        set(_get_report_key_series(loaded_sales_data)) if not loaded_sales_data.empty else set()
+    )
     monthly_report_keys = _get_report_key_series(monthly_sales_data)
     loaded_detail = monthly_sales_data[monthly_report_keys.isin(loaded_keys)].copy()
 
@@ -459,4 +464,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

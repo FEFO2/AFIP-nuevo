@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
-from dataclasses import dataclass
 
 import pandas as pd
-from dotenv import load_dotenv
-from playwright.sync_api import Frame, Page, TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import Frame, Page, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+from afip_common.config import AranciaSettings, load_arancia_settings
 
 from .utils import (
     PlaywrightTimeoutConfig,
@@ -16,30 +16,7 @@ from .utils import (
     pause_for_manual_mode,
 )
 
-
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class AranciaSettings:
-    url: str
-    username: str
-    password: str
-
-
-def load_arancia_settings() -> AranciaSettings:
-    load_dotenv()
-
-    url = os.getenv("ARANCIA_URL")
-    username = os.getenv("ARANCIA_USERNAME")
-    password = os.getenv("ARANCIA_PASSWORD")
-
-    if not all([url, username, password]):
-        raise ValueError(
-            "Faltan variables ARANCIA_URL, ARANCIA_USERNAME o ARANCIA_PASSWORD en el archivo .env"
-        )
-
-    return AranciaSettings(url=url, username=username, password=password)
 
 
 def _to_text(value: object) -> str:
@@ -122,9 +99,15 @@ class AranciaPlaywrightClient:
             marco_frame.locator('input[name="DetailsView1$ctl03"]').fill(_to_text(row["Factura"]))
             marco_frame.locator('input[name="DetailsView1$ctl04"]').fill(_to_text(row["Proveedor"]))
             marco_frame.locator('input[name="DetailsView1$ctl05"]').fill(_to_text(row["CUIT"]))
-            marco_frame.locator('input[name="DetailsView1$TextBox3"]').fill(_to_text(row["NETO 10.5"]))
-            marco_frame.locator('input[name="DetailsView1$TextBox4"]').fill(_to_text(row["NETO 21"]))
-            marco_frame.locator('input[name="DetailsView1$TextBox5"]').fill(_to_text(row["IVA 10.5"]))
+            marco_frame.locator('input[name="DetailsView1$TextBox3"]').fill(
+                _to_text(row["NETO 10.5"])
+            )
+            marco_frame.locator('input[name="DetailsView1$TextBox4"]').fill(
+                _to_text(row["NETO 21"])
+            )
+            marco_frame.locator('input[name="DetailsView1$TextBox5"]').fill(
+                _to_text(row["IVA 10.5"])
+            )
             marco_frame.locator('input[name="DetailsView1$TextBox6"]').fill(_to_text(row["IVA 21"]))
             marco_frame.locator('input[name="DetailsView1$TextBox7"]').fill(
                 _to_text(row["TOTAL_NO_GRAVADO"])
@@ -275,22 +258,25 @@ class AranciaPlaywrightClient:
         self.page.wait_for_timeout(self.timeout_config.wait_ms)
 
 
-def cargar_facturas_compra(
+def _cargar_facturas(
     data: pd.DataFrame,
     *,
+    ventas: bool,
     headless: bool = True,
     manual_on_error: bool = False,
     timeout_config: PlaywrightTimeoutConfig | None = None,
 ) -> pd.DataFrame:
+    tipo = "ventas" if ventas else "compras"
     if data.empty:
-        print("[OK] No hay facturas de compra pendientes para cargar.")
-        logger.info("Compras: no hay facturas pendientes para cargar.")
+        print(f"[OK] No hay facturas de {tipo} pendientes para cargar.")
+        logger.info("%s: no hay facturas pendientes para cargar.", tipo)
         return data.iloc[0:0].copy()
 
     settings = load_arancia_settings()
     timeout_config = timeout_config or get_playwright_timeout_config()
     logger.info(
-        "Compras: iniciando Playwright con navegador %s.",
+        "%s: iniciando Playwright con navegador %s.",
+        tipo,
         browser_mode_label(headless),
     )
 
@@ -304,12 +290,13 @@ def cargar_facturas_compra(
         try:
             client = AranciaPlaywrightClient(page, settings, timeout_config)
             client.login()
-            uploaded_data = client.upload_purchase_invoices(data)
+            upload = client.upload_sales_invoices if ventas else client.upload_purchase_invoices
+            uploaded_data = upload(data)
         except Exception as error:
             pause_for_manual_mode(
                 enabled=manual_on_error,
                 headless=headless,
-                system_name="Carga de compras",
+                system_name=f"Carga de {tipo}",
                 error=error,
             )
             raise
@@ -317,9 +304,25 @@ def cargar_facturas_compra(
             context.close()
             browser.close()
 
-    print("[OK] Carga de compras finalizada.")
-    logger.info("Compras: navegador cerrado y proceso finalizado.")
+    print(f"[OK] Carga de {tipo} finalizada.")
+    logger.info("%s: navegador cerrado y proceso finalizado.", tipo)
     return uploaded_data
+
+
+def cargar_facturas_compra(
+    data: pd.DataFrame,
+    *,
+    headless: bool = True,
+    manual_on_error: bool = False,
+    timeout_config: PlaywrightTimeoutConfig | None = None,
+) -> pd.DataFrame:
+    return _cargar_facturas(
+        data,
+        ventas=False,
+        headless=headless,
+        manual_on_error=manual_on_error,
+        timeout_config=timeout_config,
+    )
 
 
 def cargar_facturas_ventas(
@@ -329,42 +332,10 @@ def cargar_facturas_ventas(
     manual_on_error: bool = False,
     timeout_config: PlaywrightTimeoutConfig | None = None,
 ) -> pd.DataFrame:
-    if data.empty:
-        print("[OK] No hay facturas de venta pendientes para cargar.")
-        logger.info("Ventas: no hay facturas pendientes para cargar.")
-        return data.iloc[0:0].copy()
-
-    settings = load_arancia_settings()
-    timeout_config = timeout_config or get_playwright_timeout_config()
-    logger.info(
-        "Ventas: iniciando Playwright con navegador %s.",
-        browser_mode_label(headless),
+    return _cargar_facturas(
+        data,
+        ventas=True,
+        headless=headless,
+        manual_on_error=manual_on_error,
+        timeout_config=timeout_config,
     )
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=headless)
-        context = browser.new_context()
-        context.set_default_timeout(timeout_config.action_timeout_ms)
-        context.set_default_navigation_timeout(timeout_config.navigation_timeout_ms)
-        page = context.new_page()
-
-        try:
-            client = AranciaPlaywrightClient(page, settings, timeout_config)
-            client.login()
-            uploaded_data = client.upload_sales_invoices(data)
-        except Exception as error:
-            pause_for_manual_mode(
-                enabled=manual_on_error,
-                headless=headless,
-                system_name="Carga de ventas",
-                error=error,
-            )
-            raise
-        finally:
-            context.close()
-            browser.close()
-
-    print("[OK] Carga de ventas finalizada.")
-    logger.info("Ventas: navegador cerrado y proceso finalizado.")
-    return uploaded_data
-

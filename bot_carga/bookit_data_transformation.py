@@ -6,12 +6,13 @@ from io import StringIO
 import pandas as pd
 from bs4 import BeautifulSoup
 
-
 logger = logging.getLogger(__name__)
 
 
 def _is_expected_bookit_page(soup: BeautifulSoup) -> bool:
-    return soup.find(id="DropDownList1") is not None and soup.find(id="RadioButtonList1") is not None
+    return (
+        soup.find(id="DropDownList1") is not None and soup.find(id="RadioButtonList1") is not None
+    )
 
 
 def _read_html_table(path_html: str, *, empty_columns: list[str] | None = None) -> pd.DataFrame:
@@ -91,4 +92,3 @@ def procesar_inbound_html(path_html: str) -> pd.DataFrame:
 
     print(f"[OK] HTML de compras procesado: {path_html} ({len(result)} filas).")
     return result
-

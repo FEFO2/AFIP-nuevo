@@ -9,6 +9,5 @@ if str(PROJECT_ROOT) not in sys.path:
 from bot_carga.download_bookit_reports import *  # noqa: F401,F403
 from bot_carga.download_bookit_reports import main
 
-
 if __name__ == "__main__":
     raise SystemExit(main())

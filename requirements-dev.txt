@@ -1,0 +1,5 @@
+-r requirements.txt
+-r bot_revision_facturas/requirements.txt
+ruff==0.11.13
+pre-commit==4.2.0
+pip-audit==2.9.0

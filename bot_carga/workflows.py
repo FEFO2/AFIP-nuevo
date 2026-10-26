@@ -61,4 +61,3 @@ def build_purchase_month_report_data(*, project_root: Path = PROJECT_ROOT) -> pd
         skiprows=1,
     )
     return build_afip_inbound_report_data(afip_data)
-

@@ -1,0 +1,11 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["env", ".venv", ".tools", ".local"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Compatibilidad con scripts ejecutados por ruta: primero se agrega la raíz.
+"src/*.py" = ["E402"]

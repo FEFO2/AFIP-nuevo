@@ -21,7 +21,6 @@ from .workflows import (
     build_sales_upload_data,
 )
 
-
 AFIP_DOWNLOAD_FILES = {
     "comprobantes_recibidos.xlsx",
     "comprobantes_emitidos.xlsx",
@@ -244,4 +243,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

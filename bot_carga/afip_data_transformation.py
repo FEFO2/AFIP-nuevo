@@ -6,7 +6,6 @@ import string
 import numpy as np
 import pandas as pd
 
-
 NUMBER_FROM_COLUMN = "N\u00famero Desde"
 ISSUER_NAME_COLUMN = "Denominaci\u00f3n Emisor"
 RECEIVER_NAME_COLUMN = "Denominaci\u00f3n Receptor"
@@ -207,7 +206,9 @@ def build_afip_inbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
 def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
     transformed = _normalize_afip_dataframe(data)
 
-    transformed["codigo_fc"] = [int(re.match(r"(\d+)", value).group(1)) for value in transformed["Tipo"]]
+    transformed["codigo_fc"] = [
+        int(re.match(r"(\d+)", value).group(1)) for value in transformed["Tipo"]
+    ]
     transformed["Tipo"] = transformed["Tipo"].astype("string").str[-9:]
     transformed["Tipo2"] = transformed["Tipo"].str[:7]
     transformed["Tipo3"] = transformed["Tipo"].str[-1:]
@@ -229,11 +230,15 @@ def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
     )
 
     transformed["tipo3_new"] = np.where(transformed["codigo_fc"].isin([1, 3, 201, 203]), "A", "C")
-    transformed["tipo3_new"] = np.where(transformed["codigo_fc"].isin([6, 8]), "B", transformed["tipo3_new"])
+    transformed["tipo3_new"] = np.where(
+        transformed["codigo_fc"].isin([6, 8]), "B", transformed["tipo3_new"]
+    )
 
     transformed["Punto de Venta"] = transformed["Punto de Venta"].astype(str).str.zfill(5)
     transformed[NUMBER_FROM_COLUMN] = transformed[NUMBER_FROM_COLUMN].astype(str).str.zfill(8)
-    transformed["FacturaReporte"] = transformed["Punto de Venta"] + "-" + transformed[NUMBER_FROM_COLUMN]
+    transformed["FacturaReporte"] = (
+        transformed["Punto de Venta"] + "-" + transformed[NUMBER_FROM_COLUMN]
+    )
     transformed["Factura"] = transformed[NUMBER_FROM_COLUMN].astype(int)
 
     transformed[RECEIVER_NAME_COLUMN] = _sanitize_text_column(transformed[RECEIVER_NAME_COLUMN])
@@ -272,7 +277,15 @@ def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
     for column in SALES_AMOUNT_COLUMNS:
         transformed.loc[credit_mask, column] = -transformed.loc[credit_mask, column].astype(float)
 
-    for column in ["NETO 10.5", "IVA 10.5", "NETO 21", "IVA 21", "TOTAL_21", "TOTAL_10.5", "TOTAL_NO_GRAVADO"]:
+    for column in [
+        "NETO 10.5",
+        "IVA 10.5",
+        "NETO 21",
+        "IVA 21",
+        "TOTAL_21",
+        "TOTAL_10.5",
+        "TOTAL_NO_GRAVADO",
+    ]:
         transformed[column] = transformed[column].astype(str)
 
     return transformed[
@@ -294,7 +307,9 @@ def transform_afip_outbound_invoices(data: pd.DataFrame) -> pd.DataFrame:
 def build_afip_outbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
     transformed = _normalize_afip_dataframe(data)
 
-    transformed["codigo_fc"] = [int(re.match(r"(\d+)", value).group(1)) for value in transformed["Tipo"]]
+    transformed["codigo_fc"] = [
+        int(re.match(r"(\d+)", value).group(1)) for value in transformed["Tipo"]
+    ]
     transformed["Tipo"] = transformed["Tipo"].astype("string").str[-9:]
 
     transformed["tipo2_new"] = np.where(
@@ -315,7 +330,9 @@ def build_afip_outbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
 
     transformed["Punto de Venta"] = transformed["Punto de Venta"].astype(str).str.zfill(5)
     transformed[NUMBER_FROM_COLUMN] = transformed[NUMBER_FROM_COLUMN].astype(str).str.zfill(8)
-    transformed["FacturaReporte"] = transformed["Punto de Venta"] + "-" + transformed[NUMBER_FROM_COLUMN]
+    transformed["FacturaReporte"] = (
+        transformed["Punto de Venta"] + "-" + transformed[NUMBER_FROM_COLUMN]
+    )
     transformed["Factura"] = transformed[NUMBER_FROM_COLUMN].astype(int).astype(str)
 
     transformed["NETO 10.5"] = transformed["Neto Grav. IVA 10,5%"]
@@ -353,9 +370,9 @@ def build_afip_outbound_report_data(data: pd.DataFrame) -> pd.DataFrame:
     for column in SALES_AMOUNT_COLUMNS:
         transformed.loc[credit_mask, column] = -transformed.loc[credit_mask, column].astype(float)
 
-    transformed.loc[credit_mask, "TOTAL_FACTURADO"] = -transformed.loc[credit_mask, "TOTAL_FACTURADO"].astype(
-        float
-    )
+    transformed.loc[credit_mask, "TOTAL_FACTURADO"] = -transformed.loc[
+        credit_mask, "TOTAL_FACTURADO"
+    ].astype(float)
 
     return transformed[
         [

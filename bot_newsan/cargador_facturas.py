@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import code
@@ -6,16 +6,22 @@ import csv
 import json
 import os
 import re
+import sys
 import traceback
 import unicodedata
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
-from playwright.sync_api import Page, Playwright, TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import Page, Playwright, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-load_dotenv()
+from afip_common.config import get_required_env as _get_required_env
+from afip_common.config import load_environment
+
+load_environment()
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,7 +29,11 @@ CSV_PATH = BASE_DIR / "salida_csv" / "facturas_extraidas.csv"
 UNIDAD_NEGOCIO = "pga"
 PROVEEDOR = "arancia"
 SOLICITANTE = "JORBA, AGUSTINA"
-CLASIFICACION_FISCAL = "001_FACTURA_A"
+# Clasificacion fiscal en Oracle segun el codigo de comprobante AFIP.
+CLASIFICACION_FISCAL_POR_CODIGO = {
+    1: "001_FACTURA_A",
+    201: "201_FACTURA_CREDITO_A_MiPyMEs",
+}
 FINAL_ACTIONS = {"manual", "cancelar"}
 POST_SAVE_CONTINUE_SELECTOR = (
     '[id="pt1:_FOr1:1:_FONSr2:0:_FOTsr1:0:pm1:r1:0:r1:0:ITPdtl:0:AT1:_ATp:ct2"]'
@@ -54,6 +64,19 @@ def format_invoice_number(row: dict[str, str]) -> str:
     return f"{row['punto_venta']}-{row['numero_comprobante']}"
 
 
+def get_fiscal_classification(invoice: dict[str, Any]) -> str:
+    raw_code = str(invoice.get("comprobante_codigo") or "").strip()
+    if not raw_code.isdigit():
+        raise ValueError(f"La factura {invoice.get('archivo')} no tiene codigo de comprobante.")
+    code = int(raw_code)
+    if code not in CLASIFICACION_FISCAL_POR_CODIGO:
+        raise ValueError(
+            f"Codigo de comprobante {code} no soportado ({invoice.get('archivo')}). "
+            f"Soportados: {sorted(CLASIFICACION_FISCAL_POR_CODIGO)}"
+        )
+    return CLASIFICACION_FISCAL_POR_CODIGO[code]
+
+
 def get_tax_code(item: dict[str, Any]) -> str:
     tax_key = normalize_text(str(item.get("alicuota_iva", "")))
     if tax_key not in IMPUESTO_MAP:
@@ -76,20 +99,6 @@ def load_invoices(csv_path: Path) -> list[dict[str, Any]]:
             row["items"] = json.loads(row["items_json"])
             invoices.append(row)
         return invoices
-
-
-def _get_required_env(name: str, legacy_name: str | None = None) -> str:
-    value = os.getenv(name)
-    if value:
-        return value
-
-    if legacy_name:
-        legacy_value = os.getenv(legacy_name)
-        if legacy_value:
-            return legacy_value
-
-    legacy_hint = f" o {legacy_name}" if legacy_name else ""
-    raise ValueError(f"Falta la variable de entorno {name}{legacy_hint}.")
 
 
 def open_oracle(playwright: Playwright) -> tuple[Any, Any, Page]:
@@ -118,7 +127,9 @@ def open_oracle(playwright: Playwright) -> tuple[Any, Any, Page]:
 
 
 def fill_header(page: Page, invoice: dict[str, Any]) -> None:
-    page.get_by_role("combobox", name=re.compile(r"Unidad de negocio", re.IGNORECASE)).fill(UNIDAD_NEGOCIO)
+    page.get_by_role("combobox", name=re.compile(r"Unidad de negocio", re.IGNORECASE)).fill(
+        UNIDAD_NEGOCIO
+    )
     page.get_by_role("combobox", name=re.compile(r"Unidad de negocio", re.IGNORECASE)).press("Tab")
 
     page.get_by_role("combobox", name="Proveedor", exact=True).fill(PROVEEDOR)
@@ -126,8 +137,12 @@ def fill_header(page: Page, invoice: dict[str, Any]) -> None:
 
     page.get_by_role("button", name="Aceptar").click()
 
-    page.get_by_role("textbox", name=re.compile(r"N.mero$", re.IGNORECASE)).fill(format_invoice_number(invoice))
-    page.get_by_role("textbox", name="Importe", exact=True).fill(format_decimal(invoice["importe_total"]))
+    page.get_by_role("textbox", name=re.compile(r"N.mero$", re.IGNORECASE)).fill(
+        format_invoice_number(invoice)
+    )
+    page.get_by_role("textbox", name="Importe", exact=True).fill(
+        format_decimal(invoice["importe_total"])
+    )
     page.get_by_role("textbox", name="Fecha", exact=True).fill(invoice["fecha_emision"])
 
     page.get_by_role("combobox", name=re.compile(r"Solicitante", re.IGNORECASE)).fill(SOLICITANTE)
@@ -137,12 +152,15 @@ def fill_header(page: Page, invoice: dict[str, Any]) -> None:
     page.set_input_files("input[type='file']", invoice["ruta"])
     page.get_by_role("button", name="Aceptar").click()
 
+    clasificacion_fiscal = get_fiscal_classification(invoice)
     page.get_by_role("link", name="*Tipo de Comprobante").click()
     page.get_by_role("combobox", name=re.compile(r"Clasificaci.n fiscal de", re.IGNORECASE)).fill(
-        CLASIFICACION_FISCAL
+        clasificacion_fiscal
     )
-    page.get_by_role("combobox", name=re.compile(r"Clasificaci.n fiscal de", re.IGNORECASE)).press("Tab")
-    page.locator('tr[_afrrk="0"]').locator('td.xen >> text=001_FACTURA_A').click()         
+    page.get_by_role("combobox", name=re.compile(r"Clasificaci.n fiscal de", re.IGNORECASE)).press(
+        "Tab"
+    )
+    page.locator('tr[_afrrk="0"]').locator(f"td.xen >> text={clasificacion_fiscal}").click()
     page.get_by_role("button", name="Aceptar").click()
 
     page.get_by_role("button", name=re.compile(r"Ampliar L.neas", re.IGNORECASE)).click()
@@ -159,19 +177,25 @@ def fill_line_items(page: Page, items: list[dict[str, Any]]) -> None:
         row = page.locator(f'tr[_afrrk="{index - 1}"]')
         row.get_by_label("Importe").fill(format_decimal(get_line_amount(item)))
         page.keyboard.press("Tab")
-        page.get_by_role("combobox", name=re.compile(r"Clasificaci.n de impuestos", re.IGNORECASE)).fill(
-            get_tax_code(item)
-        )
+        page.get_by_role(
+            "combobox", name=re.compile(r"Clasificaci.n de impuestos", re.IGNORECASE)
+        ).fill(get_tax_code(item))
         page.keyboard.press("Tab")
 
 
 def fill_cae_data(page: Page, invoice: dict[str, Any]) -> None:
     page.get_by_role("button", name=re.compile(r"Ampliar Impuestos", re.IGNORECASE)).click()
     page.get_by_role("link", name="*CAE/CAEA").click()
-    page.locator('[id="pt1:_FOr1:1:_FONSr2:0:MAnt2:0:pm1:r1:0:ap1:df1_headerDFF1Iterator__FLEX_Context__FLEX_EMPTY::content"]').click()
-    page.locator('[id="pt1:_FOr1:1:_FONSr2:0:MAnt2:0:pm1:r1:0:ap1:df1_headerDFF1Iterator__FLEX_Context__FLEX_EMPTY::content"]').select_option(label="CAE")
+    page.locator(
+        '[id="pt1:_FOr1:1:_FONSr2:0:MAnt2:0:pm1:r1:0:ap1:df1_headerDFF1Iterator__FLEX_Context__FLEX_EMPTY::content"]'
+    ).click()
+    page.locator(
+        '[id="pt1:_FOr1:1:_FONSr2:0:MAnt2:0:pm1:r1:0:ap1:df1_headerDFF1Iterator__FLEX_Context__FLEX_EMPTY::content"]'
+    ).select_option(label="CAE")
     page.get_by_role("textbox", name=re.compile(r"N.mero CAE", re.IGNORECASE)).fill(invoice["cae"])
-    page.get_by_role("textbox", name=re.compile(r"Fecha CAE", re.IGNORECASE)).fill(invoice["vencimiento_cae"])
+    page.get_by_role("textbox", name=re.compile(r"Fecha CAE", re.IGNORECASE)).fill(
+        invoice["vencimiento_cae"]
+    )
     page.get_by_role("link", name="*Tipo de Comprobante").click()
 
 
@@ -194,7 +218,9 @@ def load_invoice(page: Page, invoice: dict[str, Any], final_action: str) -> None
     finalize_invoice(page, final_action)
 
 
-def pause_with_browser_open(browser: Any, context: Any, page: Page, error: Exception | None = None) -> None:
+def pause_with_browser_open(
+    browser: Any, context: Any, page: Page, error: Exception | None = None
+) -> None:
     if error is not None:
         print("\nSe produjo un error y el navegador va a quedar abierto para revisar.")
         print(f"Error: {error}")
@@ -239,7 +265,9 @@ def show_manual_review_alert(invoice_number: str, current_index: int, total_invo
         print("\a", end="", flush=True)
 
 
-def wait_for_manual_review(invoice: dict[str, Any], current_index: int, total_invoices: int) -> bool:
+def wait_for_manual_review(
+    invoice: dict[str, Any], current_index: int, total_invoices: int
+) -> bool:
     show_manual_review_alert(
         invoice["numero_comprobante"],
         current_index=current_index,
@@ -251,9 +279,13 @@ def wait_for_manual_review(invoice: dict[str, Any], current_index: int, total_in
     )
     print("Revisala y aceptala manualmente en la web.")
     while True:
-        user_input = input(
-            "Cuando termines, presionÃ¡ Enter para seguir con la siguiente, o escribÃ­ 'salir' para cortar: "
-        ).strip().lower()
+        user_input = (
+            input(
+                "Cuando termines, presionÃ¡ Enter para seguir con la siguiente, o escribÃ­ 'salir' para cortar: "
+            )
+            .strip()
+            .lower()
+        )
         if user_input == "":
             return True
         if user_input == "salir":
@@ -294,7 +326,9 @@ def select_invoices(
 ) -> list[dict[str, Any]]:
     selected = invoices
     if invoice_number:
-        selected = [invoice for invoice in invoices if invoice["numero_comprobante"] == invoice_number]
+        selected = [
+            invoice for invoice in invoices if invoice["numero_comprobante"] == invoice_number
+        ]
         if not selected:
             raise ValueError(f"No se encontro la factura {invoice_number} en el CSV.")
     if limit is not None:
@@ -313,12 +347,19 @@ def main() -> None:
     if not selected_invoices:
         raise ValueError("No hay facturas para procesar.")
 
+    # Validar todos los codigos de comprobante antes de abrir el navegador.
+    for invoice in selected_invoices:
+        get_fiscal_classification(invoice)
+
     with sync_playwright() as playwright:
         browser, context, page = open_oracle(playwright)
         should_close = args.final_action != "manual"
         try:
             for index, invoice in enumerate(selected_invoices):
-                print(f"Cargando factura {invoice['numero_comprobante']}...")
+                print(
+                    f"Cargando factura {invoice['numero_comprobante']} "
+                    f"(cod. {invoice.get('comprobante_codigo')} -> {get_fiscal_classification(invoice)})..."
+                )
                 load_invoice(
                     page,
                     invoice,
@@ -348,4 +389,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -10,7 +10,6 @@ from typing import Any
 
 from pypdf import PdfReader
 
-
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_PDF_DIR = BASE_DIR / "facturas_para_carga"
 DEFAULT_OUTPUT_PATH = BASE_DIR / "salida_csv" / "facturas_extraidas.csv"
@@ -25,17 +24,34 @@ ITEM_DETAIL_PATTERN = re.compile(
     (?P<precio_unitario>{AMOUNT_PATTERN})\s+
     (?P<bonificacion>{AMOUNT_PATTERN})\s+
     (?P<subtotal>{AMOUNT_PATTERN})\s+
-    (?P<alicuota_iva>(?:\d{{1,2}}(?:[.,]\d+)?%|No\s+gravado))\s+
+    (?P<alicuota_iva>(?:\d{{1,2}}(?:[.,]\d+)?%|No\s+gravado|Exento))\s+
     (?P<subtotal_con_iva>{AMOUNT_PATTERN})
     $
     """,
     re.VERBOSE,
 )
 ITEM_START_PATTERN = re.compile(rf"(?P<numeric>{AMOUNT_PATTERN}\s+[A-Za-z.]+.*)")
+# Codigos de comprobante AFIP soportados: 1 = Factura A, 201 = Factura de Credito Electronica MiPyMEs (FCE) A.
+INVOICE_TYPE_PATTERN = re.compile(
+    r"FACTURA(?P<descripcion>.*?)(?P<type>[ABCM])\s*COD\.\s*(?P<code>\d+)", re.DOTALL
+)
+FILENAME_CODE_PATTERN = re.compile(r"^\d{11}_(?P<code>\d{3})_\d+_\d+$")
+PERIOD_FROM_TO_PATTERN = re.compile(
+    r"Desde:\s*(?P<desde>\d{2}/\d{2}/\d{4})\s+Hasta:\s*(?P<hasta>\d{2}/\d{2}/\d{4})"
+)
+PAYMENT_DUE_PATTERN = re.compile(r"Fecha de Vto\. para el pago:\s*(?P<fecha>\d{2}/\d{2}/\d{4})")
+# Lineas propias de la FCE (cod. 201) que pypdf intercala dentro del bloque de items.
+ITEM_NOISE_PREFIXES = ("opcion de transferencia", "cbu del emisor", "fecha de vto. para el pago")
 TOTAL_PATTERNS = {
-    "importe_otros_tributos": re.compile(rf"Importe Otros Tributos:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"),
-    "importe_neto_no_gravado": re.compile(rf"Importe Neto No Gravado:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"),
-    "importe_neto_gravado": re.compile(rf"Importe Neto Gravado:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"),
+    "importe_otros_tributos": re.compile(
+        rf"Importe Otros Tributos:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"
+    ),
+    "importe_neto_no_gravado": re.compile(
+        rf"Importe Neto No Gravado:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"
+    ),
+    "importe_neto_gravado": re.compile(
+        rf"Importe Neto Gravado:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"
+    ),
     "iva_27": re.compile(rf"IVA 27%:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"),
     "iva_21": re.compile(rf"IVA 21%:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"),
     "iva_10_5": re.compile(rf"IVA 10(?:[.,]5)?%:\s*\$\s*(?P<value>{AMOUNT_PATTERN})"),
@@ -58,6 +74,11 @@ def normalize_match(text: str) -> str:
     text = unicodedata.normalize("NFKD", text or "")
     text = "".join(char for char in text if not unicodedata.combining(char))
     return normalize_block(text).lower()
+
+
+def strip_accents(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text or "")
+    return "".join(char for char in text if not unicodedata.combining(char))
 
 
 def parse_amount(raw_value: str | None) -> float | None:
@@ -136,6 +157,11 @@ def parse_customer_line(line: str) -> dict[str, str | None]:
 def parse_invoice_header(lines: list[str], unique_text: str) -> dict[str, Any]:
     period_line = next((line for line in lines if len(DATE_PATTERN.findall(line)) == 3), "")
     period_dates = DATE_PATTERN.findall(period_line)
+    if not period_dates:
+        # FCE (cod. 201): "Periodo Facturado Desde: dd/mm/aaaa Hasta: dd/mm/aaaa" en la misma linea.
+        period_match = PERIOD_FROM_TO_PATTERN.search(unique_text)
+        if period_match:
+            period_dates = [period_match.group("desde"), period_match.group("hasta")]
     standalone_dates = [line for line in lines if DATE_PATTERN.fullmatch(line)]
 
     emission_index = find_index(lines, "Fecha de Emision:")
@@ -155,19 +181,24 @@ def parse_invoice_header(lines: list[str], unique_text: str) -> dict[str, Any]:
 
     point_of_sale = None
     invoice_number = None
-    point_line = next((line for line in lines if normalize_match(line).startswith("punto de venta:")), "")
-    point_match = re.search(r"Punto de Venta:\s*Comp\.\s*Nro:(?P<pv>\d+)\s+(?P<number>\d+)", point_line)
+    point_line = next(
+        (line for line in lines if normalize_match(line).startswith("punto de venta:")), ""
+    )
+    point_match = re.search(
+        r"Punto de Venta:\s*Comp\.\s*Nro:(?P<pv>\d+)\s+(?P<number>\d+)", point_line
+    )
     if point_match:
         point_of_sale = point_match.group("pv")
         invoice_number = point_match.group("number")
 
     invoice_type = None
     invoice_code = None
-    invoice_type_line = next((line for line in lines if normalize_match(line).startswith("factura")), "")
-    type_match = re.search(r"FACTURA\s*(?P<type>[A-Z])\s*COD\.\s*(?P<code>\d+)", invoice_type_line)
+    invoice_description = None
+    type_match = INVOICE_TYPE_PATTERN.search(strip_accents(unique_text))
     if type_match:
         invoice_type = type_match.group("type")
         invoice_code = type_match.group("code")
+        invoice_description = normalize_block(type_match.group("descripcion")) or None
 
     iva_lines = [line for line in lines if normalize_match(line).startswith("iva ")]
     activity_label_index = find_index(lines, "Fecha de Inicio de Actividades:")
@@ -181,8 +212,11 @@ def parse_invoice_header(lines: list[str], unique_text: str) -> dict[str, Any]:
         re.DOTALL,
     )
 
+    payment_due_match = PAYMENT_DUE_PATTERN.search(unique_text)
     legend = next((line for line in lines if "LEGAJO" in normalize_match(line).upper()), None)
-    page_reference = next((line for line in lines if normalize_match(line).startswith("pag.")), None)
+    page_reference = next(
+        (line for line in lines if normalize_match(line).startswith("pag.")), None
+    )
     emitter_cuits = [line for line in lines if re.fullmatch(r"\d{11}", line)]
     company_name_index = find_index(lines, "Razon Social:")
     commercial_name = None
@@ -194,7 +228,13 @@ def parse_invoice_header(lines: list[str], unique_text: str) -> dict[str, Any]:
         "periodo_facturado": {
             "desde": period_dates[0] if len(period_dates) > 0 else None,
             "hasta": period_dates[1] if len(period_dates) > 1 else None,
-            "vencimiento_pago": period_dates[2] if len(period_dates) > 2 else None,
+            "vencimiento_pago": (
+                period_dates[2]
+                if len(period_dates) > 2
+                else payment_due_match.group("fecha")
+                if payment_due_match
+                else None
+            ),
         },
         "emisor": {
             "razon_social": emitter_name,
@@ -208,7 +248,11 @@ def parse_invoice_header(lines: list[str], unique_text: str) -> dict[str, Any]:
             "cuit": customer["cuit"],
             "razon_social": customer["razon_social"],
             "domicilio": customer_address,
-            "condicion_iva": iva_lines[1] if len(iva_lines) > 1 else iva_lines[0] if iva_lines else None,
+            "condicion_iva": iva_lines[1]
+            if len(iva_lines) > 1
+            else iva_lines[0]
+            if iva_lines
+            else None,
             "condicion_venta": next(
                 (line for line in lines if "tarjeta de credito" in normalize_match(line)),
                 None,
@@ -217,6 +261,7 @@ def parse_invoice_header(lines: list[str], unique_text: str) -> dict[str, Any]:
         "comprobante": {
             "tipo": invoice_type,
             "codigo": invoice_code,
+            "descripcion": invoice_description,
             "punto_venta": point_of_sale,
             "numero": invoice_number,
             "cae": cae_match.group("cae") if cae_match else None,
@@ -241,7 +286,21 @@ def extract_items(lines: list[str]) -> list[dict[str, Any]]:
     if end_index is None:
         return []
 
-    section_lines = [line for line in lines[start_index + 1 : end_index] if line]
+    section_lines: list[str] = []
+    inside_transfer_legend = False
+    for line in lines[start_index + 1 : end_index]:
+        normalized = normalize_match(line)
+        if normalized.startswith("opcion de transferencia"):
+            # Leyenda de la FCE: puede ocupar varias lineas hasta "...similares funciones."
+            inside_transfer_legend = (
+                "luego de su aceptacion" in normalized and "similares funciones" not in normalized
+            )
+            continue
+        if inside_transfer_legend:
+            inside_transfer_legend = "similares funciones" not in normalized
+            continue
+        if line and not normalized.startswith(ITEM_NOISE_PREFIXES):
+            section_lines.append(line)
     items: list[dict[str, Any]] = []
     description_parts: list[str] = []
     index = 0
@@ -306,13 +365,28 @@ def parse_pdf(pdf_path: Path) -> dict[str, Any]:
     unique_text = "\n\n".join(unique_pages)
     lines = [clean_line(line) for line in unique_text.splitlines() if clean_line(line)]
 
+    header = parse_invoice_header(lines, unique_text)
+    comprobante = header["comprobante"]
+    filename_match = FILENAME_CODE_PATTERN.match(pdf_path.stem)
+    if filename_match:
+        filename_code = filename_match.group("code")
+        if comprobante["codigo"] is None:
+            comprobante["codigo"] = filename_code
+        elif int(comprobante["codigo"]) != int(filename_code):
+            print(
+                f"AVISO {pdf_path.name}: el codigo del PDF ({comprobante['codigo']}) "
+                f"no coincide con el del nombre de archivo ({filename_code})."
+            )
+
     return {
         "archivo": pdf_path.name,
         "ruta": str(pdf_path.resolve()),
         "paginas_totales": len(page_texts),
-        "copias_detectadas": [label for label in (extract_copy_label(page) for page in page_texts) if label],
+        "copias_detectadas": [
+            label for label in (extract_copy_label(page) for page in page_texts) if label
+        ],
         "texto_unico": unique_text,
-        "datos_generales": parse_invoice_header(lines, unique_text),
+        "datos_generales": header,
         "items": extract_items(lines),
         "totales": extract_totals(unique_text),
     }
@@ -349,6 +423,7 @@ def flatten_invoice_data(data: dict[str, Any]) -> dict[str, Any]:
         "condicion_venta": receptor["condicion_venta"],
         "comprobante_tipo": comprobante["tipo"],
         "comprobante_codigo": comprobante["codigo"],
+        "comprobante_descripcion": comprobante["descripcion"],
         "punto_venta": comprobante["punto_venta"],
         "numero_comprobante": comprobante["numero"],
         "cae": comprobante["cae"],
@@ -358,9 +433,12 @@ def flatten_invoice_data(data: dict[str, Any]) -> dict[str, Any]:
         "cantidad_items": len(items),
         "items_descripcion": " | ".join(item["descripcion"] for item in items),
         "items_alicuota_iva": " | ".join(str(item["alicuota_iva"]) for item in items),
-        "items_subtotal": " | ".join("" if item["subtotal"] is None else str(item["subtotal"]) for item in items),
+        "items_subtotal": " | ".join(
+            "" if item["subtotal"] is None else str(item["subtotal"]) for item in items
+        ),
         "items_subtotal_con_iva": " | ".join(
-            "" if item["subtotal_con_iva"] is None else str(item["subtotal_con_iva"]) for item in items
+            "" if item["subtotal_con_iva"] is None else str(item["subtotal_con_iva"])
+            for item in items
         ),
         "items_json": json.dumps(items, ensure_ascii=False),
         "importe_otros_tributos": totals["importe_otros_tributos"],
@@ -390,8 +468,7 @@ def write_csv_output(rows: list[dict[str, Any]], output_path: Path) -> Path:
         raise ValueError("No hay filas para escribir en el CSV.")
 
     sanitized_rows = [
-        {key: sanitize_csv_value(value) for key, value in row.items()}
-        for row in rows
+        {key: sanitize_csv_value(value) for key, value in row.items()} for row in rows
     ]
 
     with output_path.open("w", encoding="utf-8-sig", newline="") as csv_file:
@@ -402,8 +479,14 @@ def write_csv_output(rows: list[dict[str, Any]], output_path: Path) -> Path:
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Extrae informacion de facturas PDF y la consolida en un CSV.")
-    parser.add_argument("--pdf", type=Path, help="Ruta a un PDF especifico. Si no se informa, procesa toda la carpeta.")
+    parser = argparse.ArgumentParser(
+        description="Extrae informacion de facturas PDF y la consolida en un CSV."
+    )
+    parser.add_argument(
+        "--pdf",
+        type=Path,
+        help="Ruta a un PDF especifico. Si no se informa, procesa toda la carpeta.",
+    )
     parser.add_argument(
         "--pdf-dir",
         type=Path,

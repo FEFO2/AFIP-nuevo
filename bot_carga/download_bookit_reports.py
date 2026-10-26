@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 
-from dotenv import load_dotenv
-from playwright.sync_api import Frame, Playwright, TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import Frame, Playwright, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+from afip_common.config import get_required_env as _get_required_env
+from afip_common.config import load_environment
 
 from .utils import (
     PlaywrightTimeoutConfig,
@@ -16,19 +18,11 @@ from .utils import (
     pause_for_manual_mode,
 )
 
-
 logger = logging.getLogger(__name__)
 PERIOD_OPTION_INDEX = {
     "current": 0,
     "previous": 1,
 }
-
-
-def _get_required_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise EnvironmentError(f"Missing environment variable: {name}")
-    return value
 
 
 def _open_arancia_login(page, url: str, *, timeout_config: PlaywrightTimeoutConfig) -> None:
@@ -134,7 +128,7 @@ def download_arancia_reports(
     manual_on_error: bool = False,
     timeout_config: PlaywrightTimeoutConfig | None = None,
 ) -> tuple[str, str]:
-    load_dotenv()
+    load_environment()
     timeout_config = timeout_config or get_playwright_timeout_config()
 
     url = _get_required_env("ARANCIA_URL")
@@ -174,7 +168,9 @@ def download_arancia_reports(
         page.wait_for_timeout(timeout_config.wait_ms)
         logger.info("Bookit: modulo de facturacion abierto.")
 
-        frame_facturacion = _wait_for_frame(page, "facturacion", timeout_ms=timeout_config.action_timeout_ms)
+        frame_facturacion = _wait_for_frame(
+            page, "facturacion", timeout_ms=timeout_config.action_timeout_ms
+        )
         if frame_facturacion.get_by_role("button", name="Afip").count():
             frame_facturacion.get_by_role("button", name="Afip").click()
         else:
@@ -242,4 +238,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

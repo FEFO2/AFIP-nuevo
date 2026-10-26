@@ -1,0 +1,16 @@
+title = "AFIP: reglas estándar y credenciales en automatizaciones"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "browser-password-literal"
+description = "Contraseña literal en un campo del navegador"
+regex = '''(?i)(?:TU CLAVE|Password|#TextBox2)[^\r\n]*\.fill\([ \t]*["']([^"'\r\n]+)["']'''
+secretGroup = 1
+
+[[rules]]
+id = "application-credential"
+description = "Credencial de los portales escrita en código o configuración"
+regex = '''(?i)(?:AFIP|ARANCIA|PGA)_(?:PASSWORD|USERNAME)[ \t]*["']?[ \t]*[:=][ \t]*["']([^"'\r\n]+)["']'''
+secretGroup = 1

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 
-from dotenv import load_dotenv
-from playwright.sync_api import Playwright, TimeoutError as PlaywrightTimeoutError, sync_playwright
+from playwright.sync_api import Playwright, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+from afip_common.config import get_required_env as _get_required_env
+from afip_common.config import load_environment
 
 from .utils import (
     PlaywrightTimeoutConfig,
@@ -16,19 +18,11 @@ from .utils import (
     pause_for_manual_mode,
 )
 
-
 logger = logging.getLogger(__name__)
 PERIOD_LABELS = {
     "current": "Este mes",
     "previous": "Mes pasado",
 }
-
-
-def _get_required_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise EnvironmentError(f"Missing environment variable: {name}")
-    return value
 
 
 def _open_afip_login(page, url: str, *, timeout_config: PlaywrightTimeoutConfig) -> None:
@@ -57,7 +51,7 @@ def download_reports(
     manual_on_error: bool = False,
     timeout_config: PlaywrightTimeoutConfig | None = None,
 ) -> None:
-    load_dotenv()
+    load_environment()
     timeout_config = timeout_config or get_playwright_timeout_config()
 
     if period not in PERIOD_LABELS:
@@ -175,4 +169,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

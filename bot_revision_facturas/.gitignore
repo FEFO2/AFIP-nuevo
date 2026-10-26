@@ -1,0 +1,8 @@
+adjuntos/
+.playwright/
+client_secret.json
+token*.json
+estado.json
+procesados.json
+tickets_facturas.csv
+reporte*.csv

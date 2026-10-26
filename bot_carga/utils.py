@@ -6,7 +6,6 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS_DIR = PROJECT_ROOT / "downloads"
 
@@ -73,7 +72,9 @@ def pause_for_manual_mode(
     print(f"\n[MANUAL] {system_name}: la automatizacion se detuvo por este error:")
     print(f"[MANUAL] {error}")
     print("[MANUAL] El navegador queda abierto para que puedas continuar manualmente.")
-    print("[MANUAL] Cuando termines, vuelve a esta consola y presiona Enter para cerrar el navegador.")
+    print(
+        "[MANUAL] Cuando termines, vuelve a esta consola y presiona Enter para cerrar el navegador."
+    )
 
     try:
         input()
@@ -106,4 +107,3 @@ def clear_downloads_dir(*, names: Collection[str] | None = None) -> Path:
             child.unlink()
 
     return downloads_dir
-
