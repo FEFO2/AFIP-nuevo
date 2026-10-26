@@ -2,19 +2,24 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import warnings
+from pathlib import Path
 
-from .data_upload import cargar_facturas_compra, cargar_facturas_ventas
-from .download_afip_reports import run_download_afip_reports
-from .download_bookit_reports import run_download_arancia_reports
-from .report_generator import generate_sales_report
-from .utils import (
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from bot_carga.data_upload import cargar_facturas_compra, cargar_facturas_ventas
+from bot_carga.download_afip_reports import run_download_afip_reports
+from bot_carga.download_bookit_reports import run_download_arancia_reports
+from bot_carga.report_generator import generate_sales_report
+from bot_carga.utils import (
     browser_mode_label,
     clear_downloads_dir,
     configure_logging,
     get_playwright_timeout_config,
 )
-from .workflows import (
+from bot_carga.workflows import (
     build_purchase_month_report_data,
     build_purchase_upload_data,
     build_sales_month_report_data,

@@ -57,20 +57,26 @@ Todos los ejemplos se ejecutan desde la raíz con el Python del entorno virtual.
 
 | Carpeta | Función | Inicio |
 | --- | --- | --- |
-| `bot_carga/` | Descargar, comparar y cargar comprobantes | `python -m bot_carga --help` |
-| `bot_facturador/` | Emitir facturas A/B | `python -m bot_facturador.invoice_process_a --help` |
-| `bot_newsan/` | Extraer PDF y cargar en Oracle | `python -m bot_newsan.extractor_factura --help` |
-| `bot_revision_facturas/` | Revisar facturas recibidas por Gmail | `python -m bot_revision_facturas --help` |
+| `bot_carga/` | Descargar, comparar y cargar comprobantes | `python bot_carga/main.py --help` |
+| `bot_facturador/` | Emitir facturas A/B | `python bot_facturador/invoice_process_a.py --help` |
+| `bot_newsan/` | Extraer PDF y cargar en Oracle | `python bot_newsan/extractor_factura.py --help` |
+| `bot_revision_facturas/` | Revisar facturas recibidas por Gmail | `python bot_revision_facturas/main.py --help` |
 | `afip_common/` | Configuración compartida | No se ejecuta directamente |
-| `src/` | Entradas antiguas compatibles con `bot_carga/` | `python src/main.py --help` |
+| `legacy/` | Archivo de los accesos antiguos de `src/` | No se usa para iniciar los bots actuales |
+
+Cada bot se inicia con un script dentro de su propia carpeta. En el caso de carga,
+también se puede entrar en `bot_carga/` y ejecutar `python main.py`.
+`python -m bot_carga` sigue disponible. Los diez archivos de la antigua carpeta
+`src/` se han movido a `legacy/src/`; actualizar cualquier tarea programada que
+todavía use una ruta `src/...`. Más detalles en [legacy/README.md](legacy/README.md).
 
 ### Carga en Arancia
 
 ```powershell
-python -m bot_carga --mode todo
-python -m bot_carga --mode compras --show-browser
-python -m bot_carga --mode ventas --period previous
-python -m bot_carga --mode todo --skip-downloads
+python bot_carga/main.py --mode todo
+python bot_carga/main.py --mode compras --show-browser
+python bot_carga/main.py --mode ventas --period previous
+python bot_carga/main.py --mode todo --skip-downloads
 ```
 
 El flujo descarga, compara y **carga las facturas pendientes**. Los archivos de trabajo
@@ -93,7 +99,8 @@ predeterminados del flujo anterior: punto de venta `10`, A en ARS y B en USD.
 Se pueden cambiar con `--punto-venta`, `--moneda` y `--csv`.
 Los PDF se guardan en `~/Downloads/AFIP_Facturas`.
 También funcionan las rutas `python bot_facturador/invoice_process_a.py` y `_b.py`
-con los mismos argumentos. Las copias de `legacy/` fueron retiradas.
+con los mismos argumentos. Las copias obsoletas de `bot_facturador/legacy/`
+fueron retiradas durante la limpieza de seguridad.
 
 ### Newsan
 
