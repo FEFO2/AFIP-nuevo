@@ -4,20 +4,32 @@ Automatizaciones de AFIP/ARCA, Arancia/Bookit, Newsan y revisión de facturas re
 
 ## Instalación en otro portátil
 
-Requiere Git y Python 3.11. Desde PowerShell:
+Requiere Git, Python 3.11 de 64 bits e Internet para la primera instalación.
+Desde PowerShell:
 
 ```powershell
 git clone --branch codex/limpieza-seguridad https://github.com/FEFO2/AFIP-nuevo.git
 cd AFIP-nuevo
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m playwright install chromium
-Copy-Item .env.example .env
+py -3.11 setup_env.py
 .\.venv\Scripts\python.exe -m pre_commit install --install-hooks
 ```
 
-En macOS/Linux, crear el entorno con `python3.11 -m venv .venv` y usar
-`.venv/bin/python` en lugar de `.\.venv\Scripts\python.exe`.
+El script crea `.venv`, instala las versiones exactas de `requirements-lock.txt`
+(incluidas las dependencias indirectas y las herramientas de desarrollo), comprueba
+su compatibilidad e instala Chromium para la versión fijada de Playwright.
+Si falta `.env`, crea una copia de `.env.example`. Conserva un `.env` existente.
+Se puede volver a ejecutar para completar una instalación interrumpida o aplicar
+las versiones fijadas a un `.venv` válido de Python 3.11. No modifica el antiguo `env/`.
+
+En macOS/Linux, ejecutar `python3.11 setup_env.py` y usar `.venv/bin/python` en lugar
+de `.\.venv\Scripts\python.exe`. El entorno de referencia se ha probado en Windows
+x64 con Python 3.11.9; el script admite las versiones 3.11.x.
+
+`requirements.txt` y `requirements-dev.txt` describen las dependencias del proyecto;
+`requirements-lock.txt` fija 77 versiones basadas en el entorno probado, con la
+corrección de seguridad de `certifi` y una versión fija de `pip`. Las instalaciones
+nuevas y GitHub Actions usan este archivo. La versión de mantenimiento de Python
+procede de la instalación local de Python 3.11.
 
 Para que el control de secretos funcione antes de cada commit, instalar también
 [Gitleaks 8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1)
@@ -113,7 +125,7 @@ python -m ruff check .
 python -m ruff format --check .
 python scripts/check_private_files.py
 python -m pre_commit run --all-files
-python -m pip_audit -r requirements.txt -r bot_revision_facturas/requirements.txt
+python -m pip_audit -r requirements-lock.txt
 ```
 
 Las pruebas usan datos ficticios y navegadores simulados. No emiten facturas ni

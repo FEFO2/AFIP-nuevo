@@ -13,13 +13,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
-      - run: python -m pip install -r requirements-dev.txt
+          cache-dependency-path: requirements-lock.txt
+      - run: python -m pip install -r requirements-lock.txt
       - run: python scripts/check_private_files.py
       - run: python -m ruff check .
       - run: python -m ruff format --check .
       - run: python -m unittest discover -s tests -v
       - run: python -m unittest discover -s bot_revision_facturas/tests -v
-      - run: python -m pip_audit -r requirements.txt -r bot_revision_facturas/requirements.txt
+      - run: python -m pip_audit -r requirements-lock.txt
       - name: Detectar secretos en la versión actual
         run: |
           mkdir -p "$RUNNER_TEMP/source"
