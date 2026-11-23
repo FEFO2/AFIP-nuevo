@@ -8,7 +8,7 @@ Requiere Git, Python 3.11 de 64 bits e Internet para la primera instalación.
 Desde PowerShell:
 
 ```powershell
-git clone --branch codex/limpieza-seguridad https://github.com/FEFO2/AFIP-nuevo.git
+git clone --branch main https://github.com/FEFO2/AFIP-nuevo.git
 cd AFIP-nuevo
 py -3.11 setup_env.py
 .\.venv\Scripts\python.exe -m pre_commit install --install-hooks
