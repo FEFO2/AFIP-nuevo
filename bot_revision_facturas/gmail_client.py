@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import logging
 import mimetypes
 import re
+import time
 from email.message import EmailMessage
 from email.utils import parseaddr
 from pathlib import Path
@@ -73,19 +75,40 @@ class GmailClient:
         self.token_path.write_text(credentials.to_json(), encoding="utf-8")
         return credentials
 
+    @staticmethod
+    def _execute(request: Any) -> Any:
+        from googleapiclient.errors import HttpError
+
+        while True:
+            try:
+                return request.execute()
+            except HttpError as error:
+                details = error.error_details
+                if (
+                    error.resp.status != 403
+                    or not isinstance(details, list)
+                    or not any(
+                        isinstance(detail, dict)
+                        and detail.get("reason") in ("rateLimitExceeded", "userRateLimitExceeded")
+                        for detail in details
+                    )
+                ):
+                    raise
+                logging.getLogger(__name__).warning(
+                    "Gmail: cuota de solicitudes alcanzada. Reintentando en 60 segundos."
+                )
+                time.sleep(60)
+
     def profile_email(self) -> str:
-        return self.service.users().getProfile(userId="me").execute()["emailAddress"]
+        return self._execute(self.service.users().getProfile(userId="me"))["emailAddress"]
 
     def find_unread_invoices(self, sender: str, subject: str) -> list[dict[str, Any]]:
         query = f'in:inbox is:unread from:{sender} subject:"{subject}" has:attachment'
         messages: list[dict[str, Any]] = []
         page_token = None
         while True:
-            response = (
-                self.service.users()
-                .messages()
-                .list(userId="me", q=query, pageToken=page_token)
-                .execute()
+            response = self._execute(
+                self.service.users().messages().list(userId="me", q=query, pageToken=page_token)
             )
             messages.extend(response.get("messages", []))
             page_token = response.get("nextPageToken")
@@ -104,8 +127,8 @@ class GmailClient:
         return exact
 
     def get_message(self, message_id: str) -> dict[str, Any]:
-        return (
-            self.service.users().messages().get(userId="me", id=message_id, format="full").execute()
+        return self._execute(
+            self.service.users().messages().get(userId="me", id=message_id, format="full")
         )
 
     @staticmethod
@@ -128,12 +151,11 @@ class GmailClient:
                     data = body.get("data")
                     attachment_id = body.get("attachmentId")
                     if attachment_id:
-                        response = (
+                        response = self._execute(
                             self.service.users()
                             .messages()
                             .attachments()
                             .get(userId="me", messageId=message["id"], id=attachment_id)
-                            .execute()
                         )
                         data = response["data"]
                     if data:
@@ -154,11 +176,10 @@ class GmailClient:
         self._modify(message_id, remove=["UNREAD", "INBOX"])
 
     def _modify(self, message_id: str, *, remove: list[str]) -> None:
-        (
+        self._execute(
             self.service.users()
             .messages()
             .modify(userId="me", id=message_id, body={"removeLabelIds": remove})
-            .execute()
         )
 
     def create_difference_draft(
@@ -189,12 +210,11 @@ class GmailClient:
             )
 
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
-        response = (
+        response = self._execute(
             self.service.users()
             .drafts()
             .create(
                 userId="me", body={"message": {"raw": raw, "threadId": source_message["threadId"]}}
             )
-            .execute()
         )
         return response["id"]

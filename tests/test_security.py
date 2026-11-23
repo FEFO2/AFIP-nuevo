@@ -16,6 +16,9 @@ class PrivateFilesTests(unittest.TestCase):
             "bot_newsan/facturas_para_carga/test.pdf",
             "bot_newsan/salida_csv/test.csv",
             "bot_facturador/lista_fac_a.csv",
+            "bot_facturador/upsra_herrera_pendiente.csv",
+            "outputs/consulta/comprobantes.xlsx",
+            "outputs/newsan/manifest.json",
             "bot_revision_facturas/adjuntos/test.pdf",
             "env/pyvenv.cfg",
         ]

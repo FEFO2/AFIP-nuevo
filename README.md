@@ -89,15 +89,33 @@ Preparar `bot_facturador/lista_fac_a.csv` (A) o `bot_facturador/lista_fac.csv` (
 con las columnas de `bot_facturador/lista_fac.example.csv`.
 
 ```powershell
-python -m bot_facturador.invoice_process_a --fecha 26/10/2026 --moneda ARS
-python -m bot_facturador.invoice_process_b --fecha 26/10/2026 --moneda USD
+python -m bot_facturador.invoice_process_a --fecha 31/10/2026 --desde 01/10/2026 --hasta 31/10/2026 --punto-venta 2 --moneda ARS
+python -m bot_facturador.invoice_process_b --fecha 30/10/2026 --desde 01/10/2026 --hasta 30/10/2026 --punto-venta 2 --moneda USD
+python -m bot_facturador.invoice_process_b --fecha 30/10/2026 --desde 01/10/2026 --hasta 30/10/2026 --solo-revisar
 ```
 
-Estos comandos **emiten comprobantes reales**. Elegir la fecha correcta en cada
-ejecución; ya no hay una fecha fija dentro del código. Se conservan los valores
-predeterminados del flujo anterior: punto de venta `10`, A en ARS y B en USD.
+La exportación de consumidor final (`Monto (ARS)`, `Razon Social`, `categoria`,
+`Column 10`, `DOC`) se puede usar sin convertirla. El bot le asigna exclusivamente
+`INTERMEDIACIÓN DE SERVICIOS TURÍSTICOS`, condición exenta y monto ARS. Este formato
+queda bloqueado a Factura B, punto de venta 2 y `30/10/2026`; no admite una fecha de
+noviembre. Un DNI rechazado se marca como omitido y el lote continúa.
+
+Estos comandos **emiten comprobantes reales**. `--fecha` es la fecha de emisión;
+`--desde` y `--hasta` delimitan el período del servicio. `--vencimiento` es opcional
+y, para operaciones de contado, usa la fecha de emisión por defecto. El bot muestra
+tipo, punto de venta, moneda, fechas, CSV y cantidad, y exige escribir una frase que
+identifica todo el lote antes de abrir ARCA. Después comprueba los campos y el resumen
+antes de confirmar. `--solo-revisar` completa y valida la primera fila, pero se detiene
+sin emitirla.
+El punto de venta predeterminado es `2`. Para ese punto, la fecha mínima configurada
+es `31/10/2026` en Factura A y `30/10/2026` en Factura B. Las monedas
+predeterminadas siguen siendo A/ARS y B/USD; la exportación protegida de consumidor
+final selecciona ARS automáticamente.
 Se pueden cambiar con `--punto-venta`, `--moneda` y `--csv`.
 Los PDF se guardan en `~/Downloads/AFIP_Facturas`.
+En esa misma carpeta, `facturador_estado.json` impide repetir filas ya emitidas. Si una
+ejecución se corta durante la confirmación, el siguiente inicio pide comprobar ARCA y
+resolverla como `NO_EMITIDA` o `EMITIDA número CAE` antes de continuar.
 También funcionan las rutas `python bot_facturador/invoice_process_a.py` y `_b.py`
 con los mismos argumentos. Las copias obsoletas de `bot_facturador/legacy/`
 fueron retiradas durante la limpieza de seguridad.
@@ -112,7 +130,15 @@ python -m bot_newsan.cargador_facturas --help
 ```
 
 La extracción genera el CSV local en `bot_newsan/salida_csv/`. La carga conserva
-la revisión manual y la compatibilidad con las facturas de crédito MiPyME.
+la revisión manual y la compatibilidad con las facturas de crédito MiPyME, incluidas
+las líneas exentas y no gravadas.
+
+El cargador guarda el perfil de sesión de PGA en `.local/pga_browser_profile/`, que
+está excluido de Git. En el primer inicio, o cuando venza la confianza, introducir
+en el navegador el código recibido por correo y marcar la opción de confiar en el
+dispositivo durante 15 días. Las ejecuciones siguientes reutilizan esa sesión. No
+abrir dos instancias del cargador a la vez porque el perfil solo puede usarlo un
+navegador.
 `pga_bot_code.py` reutiliza el mismo acceso a Oracle para la consola de pruebas.
 
 ### Revisión por Gmail

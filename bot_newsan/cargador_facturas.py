@@ -9,6 +9,7 @@ import re
 import sys
 import traceback
 import unicodedata
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,9 @@ load_environment()
 
 BASE_DIR = Path(__file__).resolve().parent
 CSV_PATH = BASE_DIR / "salida_csv" / "facturas_extraidas.csv"
+PGA_PROFILE_DIR = BASE_DIR.parent / ".local" / "pga_browser_profile"
+PGA_LOGIN_TIMEOUT_MS = 10_000
+PGA_VERIFICATION_TIMEOUT_MS = 5 * 60 * 1000
 UNIDAD_NEGOCIO = "pga"
 PROVEEDOR = "arancia"
 SOLICITANTE = "JORBA, AGUSTINA"
@@ -48,6 +52,15 @@ IMPUESTO_MAP = {
     "no gravado": "ar_iva_no",
     "exento": "ar_iva_exento",
 }
+TASA_IVA_POR_ALICUOTA = {
+    "21": Decimal("0.21"),
+    "21%": Decimal("0.21"),
+    "10,5": Decimal("0.105"),
+    "10.5": Decimal("0.105"),
+    "10,5%": Decimal("0.105"),
+    "10.5%": Decimal("0.105"),
+}
+CENTAVO = Decimal("0.01")
 
 
 def normalize_text(value: str) -> str:
@@ -57,7 +70,8 @@ def normalize_text(value: str) -> str:
 
 
 def format_decimal(value: Any) -> str:
-    return f"{float(value):.2f}".replace(".", ",")
+    amount = Decimal(str(value)).quantize(CENTAVO, rounding=ROUND_HALF_UP)
+    return f"{amount:.2f}".replace(".", ",")
 
 
 def format_invoice_number(row: dict[str, str]) -> str:
@@ -91,39 +105,142 @@ def get_line_amount(item: dict[str, Any]) -> float:
     return float(item["subtotal"])
 
 
+def get_pga_total(invoice: dict[str, Any]) -> Decimal:
+    bases_por_tasa: dict[Decimal, Decimal] = {}
+    total = Decimal("0")
+
+    for item in invoice["items"]:
+        tax_key = normalize_text(str(item.get("alicuota_iva", "")))
+        if tax_key in {"no gravado", "exento"}:
+            total += Decimal(str(item["subtotal_con_iva"]))
+            continue
+        if tax_key not in TASA_IVA_POR_ALICUOTA:
+            raise ValueError(f"Alicuota no soportada: {item.get('alicuota_iva')}")
+
+        rate = TASA_IVA_POR_ALICUOTA[tax_key]
+        bases_por_tasa[rate] = bases_por_tasa.get(rate, Decimal("0")) + Decimal(
+            str(item["subtotal"])
+        )
+
+    for rate, base in bases_por_tasa.items():
+        total += base + (base * rate).quantize(CENTAVO, rounding=ROUND_HALF_UP)
+
+    pga_total = total.quantize(CENTAVO, rounding=ROUND_HALF_UP)
+    invoice_total = Decimal(str(invoice["importe_total"])).quantize(CENTAVO, rounding=ROUND_HALF_UP)
+    if abs(pga_total - invoice_total) > CENTAVO:
+        raise ValueError(
+            f"El total calculado por PGA ({pga_total}) difiere del total de la factura "
+            f"({invoice_total}) en mas de un centavo."
+        )
+    return pga_total
+
+
+def select_tax_code(page: Page, tax_code: str) -> None:
+    tax_input = page.get_by_role(
+        "combobox", name=re.compile(r"Clasificaci.n de impuestos", re.IGNORECASE)
+    )
+    tax_input.fill(tax_code)
+    page.keyboard.press("Tab")
+
+    modal_overlay = page.locator(".AFModalGlassPane:visible")
+    try:
+        modal_overlay.wait_for(state="visible", timeout=1000)
+    except PlaywrightTimeoutError:
+        return
+
+    modal = modal_overlay.locator("xpath=..")
+    modal.get_by_text(tax_code.upper(), exact=True).first.click()
+    modal.get_by_role("button", name="Aceptar", exact=True).click()
+    modal_overlay.wait_for(state="hidden", timeout=10000)
+
+
+def select_fiscal_classification(page: Page, classification: str) -> None:
+    classification_input = page.get_by_role(
+        "combobox", name=re.compile(r"Clasificaci.n fiscal de", re.IGNORECASE)
+    )
+    classification_input.fill(classification)
+    classification_input.press("Tab")
+
+    option = page.locator("td.xen:visible").filter(
+        has_text=re.compile(rf"^\s*{re.escape(classification)}\s*$")
+    )
+    try:
+        option.first.wait_for(state="visible", timeout=5000)
+    except PlaywrightTimeoutError:
+        print(
+            f"PGA no mostro una lista para seleccionar {classification}. "
+            "Comprueba en el navegador que la clasificacion fiscal del documento es correcta "
+            "y, si hace falta, seleccionala manualmente."
+        )
+        if input("Escribe SI para continuar o pulsa Enter para detener: ").strip().upper() != "SI":
+            raise RuntimeError("Clasificacion fiscal no confirmada; carga detenida.")
+        if classification_input.first.input_value().strip() != classification:
+            raise RuntimeError("La clasificacion fiscal no coincide; carga detenida.")
+    else:
+        option.first.click()
+        page.get_by_role("button", name="Aceptar", exact=True).click()
+
+
 def load_invoices(csv_path: Path) -> list[dict[str, Any]]:
     with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
         reader = csv.DictReader(csv_file)
         invoices: list[dict[str, Any]] = []
         for row in reader:
             row["items"] = json.loads(row["items_json"])
+            row["solicitante"] = (row.get("solicitante") or "").strip() or SOLICITANTE
             invoices.append(row)
         return invoices
 
 
-def open_oracle(playwright: Playwright) -> tuple[Any, Any, Page]:
+def open_oracle(playwright: Playwright) -> tuple[Any, Page]:
     url = _get_required_env("PGA_URL", "PAG_URL")
-    username = _get_required_env("PGA_USERNAME")
-    password = _get_required_env("PGA_PASSWORD")
-
-    browser = playwright.chromium.launch(headless=False, slow_mo=1200)
-    context = browser.new_context()
-    page = context.new_page()
-
-    page.goto(url)
-    page.get_by_role("textbox", name="Username").fill(username)
-    page.get_by_role("textbox", name="Password").fill(password)
-    page.get_by_role("button", name="Next").click()
-    page.wait_for_load_state("networkidle")
+    PGA_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    context = playwright.chromium.launch_persistent_context(
+        str(PGA_PROFILE_DIR), headless=False, slow_mo=1200
+    )
+    page = context.pages[0] if context.pages else context.new_page()
 
     try:
-        page.get_by_role("link", name="Página Inicial", exact=True).click(timeout=10000)
-    except PlaywrightTimeoutError:
-        pass
+        page.goto(url)
+        username_input = page.get_by_role("textbox", name="Username")
+        try:
+            username_input.wait_for(state="visible", timeout=PGA_LOGIN_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            pass
+        else:
+            username_input.fill(_get_required_env("PGA_USERNAME"))
+            page.get_by_role("textbox", name="Password").fill(_get_required_env("PGA_PASSWORD"))
+            page.get_by_role("button", name="Next").click()
+            print(
+                "Si PGA solicita el codigo enviado por correo, introducilo en el navegador "
+                "y marca la opcion de confiar en este dispositivo durante 15 dias."
+            )
 
-    page.get_by_role("link", name=re.compile(r"Crear factura", re.IGNORECASE)).click(timeout=60000)
+        home_link = page.get_by_role("link", name="Página Inicial", exact=True)
+        create_invoice_link = page.get_by_role(
+            "link", name=re.compile(r"Crear factura", re.IGNORECASE)
+        )
+        try:
+            home_link.or_(create_invoice_link).first.wait_for(
+                state="visible", timeout=PGA_VERIFICATION_TIMEOUT_MS
+            )
+        except PlaywrightTimeoutError as exception:
+            raise RuntimeError(
+                "PGA no completo el inicio de sesion. Si pidio un codigo, introducilo y marca "
+                "la opcion de confiar en este dispositivo durante 15 dias."
+            ) from exception
 
-    return browser, context, page
+        if home_link.is_visible():
+            home_link.click()
+        create_invoice_link.click(timeout=60000)
+    except Exception:
+        try:
+            context.close()
+        except Exception:
+            pass
+        raise
+
+    return context, page
 
 
 def fill_header(page: Page, invoice: dict[str, Any]) -> None:
@@ -140,12 +257,19 @@ def fill_header(page: Page, invoice: dict[str, Any]) -> None:
     page.get_by_role("textbox", name=re.compile(r"N.mero$", re.IGNORECASE)).fill(
         format_invoice_number(invoice)
     )
-    page.get_by_role("textbox", name="Importe", exact=True).fill(
-        format_decimal(invoice["importe_total"])
-    )
+    pga_total = get_pga_total(invoice)
+    invoice_total = Decimal(str(invoice["importe_total"])).quantize(CENTAVO, rounding=ROUND_HALF_UP)
+    if pga_total != invoice_total:
+        print(
+            f"Ajuste de redondeo PGA para {invoice['numero_comprobante']}: "
+            f"{invoice_total} -> {pga_total}"
+        )
+    page.get_by_role("textbox", name="Importe", exact=True).fill(format_decimal(pga_total))
     page.get_by_role("textbox", name="Fecha", exact=True).fill(invoice["fecha_emision"])
 
-    page.get_by_role("combobox", name=re.compile(r"Solicitante", re.IGNORECASE)).fill(SOLICITANTE)
+    page.get_by_role("combobox", name=re.compile(r"Solicitante", re.IGNORECASE)).fill(
+        invoice.get("solicitante") or SOLICITANTE
+    )
     page.get_by_role("combobox", name=re.compile(r"Solicitante", re.IGNORECASE)).press("Tab")
 
     page.get_by_role("link", name=re.compile(r"Gestionar Anexos", re.IGNORECASE)).click()
@@ -154,14 +278,7 @@ def fill_header(page: Page, invoice: dict[str, Any]) -> None:
 
     clasificacion_fiscal = get_fiscal_classification(invoice)
     page.get_by_role("link", name="*Tipo de Comprobante").click()
-    page.get_by_role("combobox", name=re.compile(r"Clasificaci.n fiscal de", re.IGNORECASE)).fill(
-        clasificacion_fiscal
-    )
-    page.get_by_role("combobox", name=re.compile(r"Clasificaci.n fiscal de", re.IGNORECASE)).press(
-        "Tab"
-    )
-    page.locator('tr[_afrrk="0"]').locator(f"td.xen >> text={clasificacion_fiscal}").click()
-    page.get_by_role("button", name="Aceptar").click()
+    select_fiscal_classification(page, clasificacion_fiscal)
 
     page.get_by_role("button", name=re.compile(r"Ampliar L.neas", re.IGNORECASE)).click()
 
@@ -177,10 +294,7 @@ def fill_line_items(page: Page, items: list[dict[str, Any]]) -> None:
         row = page.locator(f'tr[_afrrk="{index - 1}"]')
         row.get_by_label("Importe").fill(format_decimal(get_line_amount(item)))
         page.keyboard.press("Tab")
-        page.get_by_role(
-            "combobox", name=re.compile(r"Clasificaci.n de impuestos", re.IGNORECASE)
-        ).fill(get_tax_code(item))
-        page.keyboard.press("Tab")
+        select_tax_code(page, get_tax_code(item))
 
 
 def fill_cae_data(page: Page, invoice: dict[str, Any]) -> None:
@@ -218,9 +332,7 @@ def load_invoice(page: Page, invoice: dict[str, Any], final_action: str) -> None
     finalize_invoice(page, final_action)
 
 
-def pause_with_browser_open(
-    browser: Any, context: Any, page: Page, error: Exception | None = None
-) -> None:
+def pause_with_browser_open(context: Any, page: Page, error: Exception | None = None) -> None:
     if error is not None:
         print("\nSe produjo un error y el navegador va a quedar abierto para revisar.")
         print(f"Error: {error}")
@@ -228,9 +340,9 @@ def pause_with_browser_open(
     else:
         print("\nProceso finalizado y el navegador va a quedar abierto para revisar.")
 
-    print("\nVariables disponibles: page, context, browser")
+    print("\nVariables disponibles: page, context")
     print("Escribi exit() para salir y cerrar todo manualmente.")
-    local_vars = {"page": page, "context": context, "browser": browser}
+    local_vars = {"page": page, "context": context}
     if error is not None:
         local_vars["error"] = error
     code.interact(local=local_vars)
@@ -243,11 +355,17 @@ def prepare_next_invoice_after_manual_save(page: Page) -> None:
     next_invoice_button.click()
 
 
-def show_manual_review_alert(invoice_number: str, current_index: int, total_invoices: int) -> None:
+def show_manual_review_alert(
+    invoice_number: str,
+    current_index: int,
+    total_invoices: int,
+    solicitante: str = SOLICITANTE,
+) -> None:
     """Muestra un aviso visible cuando una factura queda lista para revisar."""
     message = (
         f"La factura {invoice_number} esta lista para revisar en PGA "
         f"({current_index}/{total_invoices}).\n\n"
+        f"Solicitante: {solicitante}.\n\n"
         "Cierra este aviso, revisala y aceptala manualmente en el navegador."
     )
 
@@ -272,12 +390,14 @@ def wait_for_manual_review(
         invoice["numero_comprobante"],
         current_index=current_index,
         total_invoices=total_invoices,
+        solicitante=invoice.get("solicitante") or SOLICITANTE,
     )
     print(
         f"\nFactura {invoice['numero_comprobante']} lista para revisar en PGA "
         f"({current_index}/{total_invoices})."
     )
     print("Revisala y aceptala manualmente en la web.")
+    print(f"Solicitante: {invoice.get('solicitante') or SOLICITANTE}")
     while True:
         user_input = (
             input(
@@ -345,14 +465,15 @@ def main() -> None:
     selected_invoices = select_invoices(invoices, args.invoice_number, args.limit)
 
     if not selected_invoices:
-        raise ValueError("No hay facturas para procesar.")
+        print("No hay facturas para procesar.")
+        return
 
     # Validar todos los codigos de comprobante antes de abrir el navegador.
     for invoice in selected_invoices:
         get_fiscal_classification(invoice)
 
     with sync_playwright() as playwright:
-        browser, context, page = open_oracle(playwright)
+        context, page = open_oracle(playwright)
         should_close = args.final_action != "manual"
         try:
             for index, invoice in enumerate(selected_invoices):
@@ -374,17 +495,16 @@ def main() -> None:
                     if not should_continue:
                         should_close = False
                         print("Proceso detenido por el usuario. El navegador queda abierto.")
-                        pause_with_browser_open(browser, context, page)
+                        pause_with_browser_open(context, page)
                         return
                     if index < len(selected_invoices) - 1:
                         prepare_next_invoice_after_manual_save(page)
         except Exception as error:
             should_close = False
-            pause_with_browser_open(browser, context, page, error)
+            pause_with_browser_open(context, page, error)
         finally:
             if should_close:
                 context.close()
-                browser.close()
 
 
 if __name__ == "__main__":

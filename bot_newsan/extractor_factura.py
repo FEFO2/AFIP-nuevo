@@ -20,7 +20,7 @@ ITEM_DETAIL_PATTERN = re.compile(
     rf"""
     ^
     (?P<cantidad>{AMOUNT_PATTERN})\s+
-    (?P<unidad_medida>[A-Za-zA-Za-z.]+)\s+
+    (?P<unidad_medida>[A-Za-z.]+(?:\s+[A-Za-z.]+)*)\s+
     (?P<precio_unitario>{AMOUNT_PATTERN})\s+
     (?P<bonificacion>{AMOUNT_PATTERN})\s+
     (?P<subtotal>{AMOUNT_PATTERN})\s+
@@ -35,7 +35,7 @@ ITEM_START_PATTERN = re.compile(rf"(?P<numeric>{AMOUNT_PATTERN}\s+[A-Za-z.]+.*)"
 INVOICE_TYPE_PATTERN = re.compile(
     r"FACTURA(?P<descripcion>.*?)(?P<type>[ABCM])\s*COD\.\s*(?P<code>\d+)", re.DOTALL
 )
-FILENAME_CODE_PATTERN = re.compile(r"^\d{11}_(?P<code>\d{3})_\d+_\d+$")
+FILENAME_CODE_PATTERN = re.compile(r"^\d{11}_(?P<code>\d{3})_\d+_\d+(?: \(\d+\))?$")
 PERIOD_FROM_TO_PATTERN = re.compile(
     r"Desde:\s*(?P<desde>\d{2}/\d{2}/\d{4})\s+Hasta:\s*(?P<hasta>\d{2}/\d{2}/\d{4})"
 )
@@ -273,7 +273,10 @@ def parse_invoice_header(lines: list[str], unique_text: str) -> dict[str, Any]:
 
 
 def extract_items(lines: list[str]) -> list[dict[str, Any]]:
-    start_index = find_index(lines, "IVA Subtotal c/IVA")
+    start_index = next(
+        (index for index, line in enumerate(lines) if "subtotal c/iva" in normalize_match(line)),
+        None,
+    )
     if start_index is None:
         return []
 

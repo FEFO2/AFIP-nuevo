@@ -14,7 +14,17 @@ see the main README for the version and alternative local path.
 
 The repository no longer tracks Python environments, credentials, OAuth tokens
 or invoice documents. These files must be configured or transferred privately
-on each computer. Invoice issuing now requires an explicit `--fecha DD/MM/YYYY`.
+on each computer. Invoice issuing requires explicit `--fecha`, `--desde` and
+`--hasta` dates in `DD/MM/YYYY` format and confirms them before issuing.
+The default point of sale is `2`; its minimum dates are `31/10/2026` for A and
+`30/10/2026` for B invoices.
+Consumer-final exports containing `Monto (ARS)`, `Razon Social`, `categoria`,
+`Column 10`, and `DOC` are locked to invoice B, point of sale 2, ARS, and
+`30/10/2026`. November dates are rejected before opening ARCA and rechecked before
+the final confirmation. Explicitly rejected documents are recorded as skipped and
+the batch continues.
+`--solo-revisar` validates the first row in ARCA without issuing it. A local journal
+under `~/Downloads/AFIP_Facturas` prevents duplicate retries after confirmation.
 
 **Credentials exist in older commits. Rotate the AFIP, Arancia and PGA passwords
 before reuse. This branch does not erase Git history.** See [SECURITY.md](SECURITY.md).

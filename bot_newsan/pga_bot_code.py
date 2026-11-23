@@ -16,7 +16,7 @@ def prueba(page):
 
 if __name__ == "__main__":
     with sync_playwright() as playwright:
-        browser, context, page = abrir_oracle(playwright)
+        context, page = abrir_oracle(playwright)
 
         print("Oracle quedo abierto.")
         print("Puedes probar comandos usando la variable page.")
@@ -27,7 +27,6 @@ if __name__ == "__main__":
         code.interact(local=globals() | locals())
 
         context.close()
-        browser.close()
 
 
 # ejemplo:
