@@ -1,43 +1,49 @@
-# Casos de prueba para solicitud de factura por texto
+# Casos de prueba para solicitudes de factura
 
-Estos ejemplos son ficticios. El resultado esperado describe solo la **extracción** del modelo. La ficha del cliente, los cálculos y la validación se aplican después, como indica `solicitud_factura_ia_referencia.md`.
+Los ejemplos son ficticios. Se evalúa la **extracción**, antes de consultar la base de clientes o crear una orden. En todos los casos, el resultado debe ser un objeto con la lista `facturas`.
 
-## 1. Dos conceptos y dos alícuotas
+## 1. Dos conceptos, una factura
 
-**Entrada:** «Factura a Cliente de prueba: intermediación de pasajes aéreos por 453,15 sin IVA al 10,5 % y gestión administrativa por 100 sin IVA al 21 %. En pesos. Enviarla a fran@example.com.»
+**Entrada:** «Factura a Cliente de prueba: intermediación de pasajes aéreos por 453,15 sin IVA al 10,5 % y gestión administrativa por 100 sin IVA al 21 %. En pesos.»
 
-**Esperado:** `cliente="Cliente de prueba"`, `tipo_factura=null`, `moneda="ARS"`, `correo_entrega="fran@example.com"`. Dos conceptos: `453.15` con `10,5%` y `100.00` con `21%`. El tipo A recomendado para el cliente se agrega después, identificado como sugerencia.
+**Esperado:** Una factura con `cliente="Cliente de prueba"`, `cuit=null`, `tipo_factura=null`, `condicion_iva=null`, `moneda="ARS"`. Dos conceptos: `453.15` con `10,5%` y `100.00` con `21%`. La preferencia A y los datos fiscales se aplican después desde la ficha.
 
-## 2. Alícuota común a todos los conceptos
+## 2. Nombre de código y alícuota común
 
-**Entrada:** «Para Cliente de prueba, facturar asesoría 200 netos y gestión 50 netos. Todo al 10,5 %. Enviar a fran@example.com.»
+**Entrada:** «Para el cliente código SOL, asesoría 200 netos y gestión 50 netos. Todo al 10,5 %.»
 
-**Esperado:** Dos conceptos, ambos con `iva="10,5%"` y netos `200.00` y `50.00`. `tipo_factura=null`. `moneda=null`, porque el texto no la indica; la aplicación deberá pedirla o sugerirla para revisión.
+**Esperado:** Una factura con `cliente="SOL"`, `moneda="ARS"`, `tipo_factura=null` y dos conceptos `200.00` y `50.00`, ambos con `iva="10,5%"`. La aplicación debe resolver SOL en la base; el modelo no inventa CUIT ni razón social.
 
-## 3. Factura B en dólares
+## 3. Tipo y condición explícitos
 
-**Entrada:** «Factura B a Ana: asesoría 250,50 netos al 21 % en USD. Tipo de cambio 1200,50 pesos por dólar. Enviar a ana@example.com.»
+**Entrada:** «Factura B para Ana, consumidora final: asesoría 250,50 netos al 21 % en USD.»
 
-**Esperado:** `cliente="Ana"`, `tipo_factura="B"`, `moneda="USD"`, `tipo_cambio="1200.50"`, `correo_entrega="ana@example.com"`, un concepto de `250.50` con `21%`. Ana no existe en la base de prueba: la aplicación no puede crear la orden hasta identificarla.
+**Esperado:** Una factura con `cliente="Ana"`, `tipo_factura="B"`, `condicion_iva="consumidor final"`, `moneda="USD"` y un concepto de `250.50` con `21%`. La aplicación obtiene el tipo de cambio del sistema. Ana no existe en la base de prueba, por lo que requiere identificación antes de crear la orden.
 
-## 4. USD sin tipo de cambio
+## 4. Condición monotributista y CUIT
 
-**Entrada:** «Facturar a Cliente de prueba un servicio de coordinación por 90 netos, exento, en dólares. Enviar a fran@example.com.»
+**Entrada:** «Facturá a Pérez, monotributista, CUIT 20-12345678-3, un servicio por 90 netos exento.»
 
-**Esperado:** `moneda="USD"`, `tipo_cambio=null`, un concepto `90.00` con `iva="exento"`. Se debe solicitar el tipo de cambio antes de crear la orden.
+**Esperado:** Una factura con `cliente="Pérez"`, `cuit="20123456783"`, `condicion_iva="responsable monotributo"`, `tipo_factura=null`, `moneda="ARS"` y un concepto `90.00` con `iva="exento"`. El CUIT es dato de prueba; la aplicación lo comprueba contra la ficha antes de usarlo.
 
-## 5. Importe con IVA incluido
+## 5. Dos facturas en un correo
 
-**Entrada:** «Cliente de prueba, hotel por 121 pesos finales con IVA 21 %. Enviar a fran@example.com.»
+**Entrada:** «Hacé dos facturas: para Cliente de prueba, pasajes 300 netos al 10,5 %; para Ana, asesoría 100 netos al 21 %, Factura B. Todo en pesos.»
 
-**Esperado:** Concepto «hotel», `iva="21%"`, `precio_neto=null`. Se debe aclarar o convertir el importe con una regla verificada antes de crear la orden. El valor `121.00` no se puede presentar como neto.
+**Esperado:** Dos elementos en `facturas`, en el orden del correo. El primero tiene cliente `Cliente de prueba`, un concepto `300.00` al `10,5%` y `tipo_factura=null`. El segundo tiene cliente `Ana`, un concepto `100.00` al `21%` y `tipo_factura="B"`. Ambos tienen `moneda="ARS"`. No se mezclan los conceptos.
 
-## 6. Datos insuficientes
+## 6. Importe final con IVA
+
+**Entrada:** «Cliente de prueba, hotel por 121 pesos finales con IVA 21 %.»
+
+**Esperado:** Una factura con concepto «hotel», `iva="21%"`, `precio_neto=null` y `moneda="ARS"`. `121.00` no se presenta como neto; el monto requiere conversión verificada o revisión.
+
+## 7. Datos insuficientes
 
 **Entrada:** «Facturá los pasajes de ayer.»
 
-**Esperado:** `cliente=null`, `tipo_factura=null`, `moneda=null`, `correo_entrega=null`. Puede identificarse el concepto «pasajes», pero su `precio_neto` y `iva` quedan en `null`. No se crea orden.
+**Esperado:** Una factura con `cliente=null`, `cuit=null`, `tipo_factura=null`, `condicion_iva=null`, `moneda="ARS"`. Puede aparecer el concepto «pasajes», con `precio_neto=null` e `iva=null`. No se crea orden.
 
 ## Criterio de evaluación
 
-Para cada caso, comparar cliente, tipo, moneda, cambio, correo, número de conceptos, descripción, neto e IVA con el esperado. Registrar campos inventados, campos omitidos y conversiones incorrectas. Una respuesta JSON válida con datos erróneos **no aprueba** el caso. Probar también que la ausencia de Ollama o un tiempo de espera no cree ninguna orden.
+Comparar cantidad de facturas, asignación de conceptos, cliente o código, CUIT, tipo de factura, condición, moneda, neto e IVA. Registrar datos inventados, omisiones y mezclas entre facturas. Un JSON válido con datos incorrectos no aprueba. El tipo de cambio y el correo de entrega no forman parte de la respuesta del modelo.
