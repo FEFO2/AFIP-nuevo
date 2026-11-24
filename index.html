@@ -24,7 +24,10 @@
 <section id="numbers-view" hidden aria-labelledby="numbers-heading">
   <div class="numbers-heading">
     <div><h1 id="numbers-heading">Resumen consolidación ARG</h1><p>Facturación · Cálculo de IVA</p></div>
-    <button id="refresh-iva" type="button">Actualizar desde Arancia</button>
+    <div class="refresh-action">
+      <button id="refresh-iva" type="button">Actualizar desde Arancia</button>
+      <small>Última actualización: <time id="iva-updated">—</time></small>
+    </div>
   </div>
   <p id="iva-status" role="status"></p>
   <div class="numbers-controls"><label>Año <select id="iva-year"></select></label><span id="iva-coverage"></span></div>

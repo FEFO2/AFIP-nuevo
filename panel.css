@@ -68,6 +68,8 @@ main {padding-bottom:48px}
 .numbers-heading {display:flex;align-items:center;justify-content:space-between;gap:20px;padding:34px 0 24px}
 .numbers-heading h1 {font-size:2rem;margin:0;letter-spacing:-.04em}
 .numbers-heading p {margin:4px 0;color:#566879}
+.refresh-action {display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.refresh-action small {color:#566879;font-size:.82rem}
 #refresh-iva {background:#192d40;color:white;border:0;border-radius:8px;padding:10px 16px;font:inherit;cursor:pointer}
 #refresh-iva:disabled {opacity:.55;cursor:wait}
 #iva-status:empty {display:none}
@@ -92,4 +94,4 @@ main {padding-bottom:48px}
 .iva-table thead tr:first-child {background:#e8eef3}
 .iva-table thead tr:last-child {background:#f2f5f8;font-size:.85rem}
 .iva-table tbody tr:hover {background:#fff7f2}
-@media(max-width:600px){.numbers-heading{align-items:flex-start;flex-direction:column}.iva-vertical-block{padding:14px}.iva-vertical-block dl{gap:0 8px}}
+@media(max-width:600px){.numbers-heading{align-items:flex-start;flex-direction:column}.refresh-action{align-items:flex-start}.iva-vertical-block{padding:14px}.iva-vertical-block dl{gap:0 8px}}

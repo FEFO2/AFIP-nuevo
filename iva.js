@@ -7,6 +7,7 @@ const yearPicker = document.querySelector('#iva-year');
 const content = document.querySelector('#iva-content');
 const status = document.querySelector('#iva-status');
 const coverage = document.querySelector('#iva-coverage');
+const lastUpdate = document.querySelector('#iva-updated');
 const fields = [
   ['neto_105', 'Neto 10,5 %'], ['neto_21', 'Neto 21 %'],
   ['iva_105', 'IVA 10,5 %'], ['iva_21', 'IVA 21 %'],
@@ -163,6 +164,18 @@ async function loadNumbers() {
   const response = await fetch('/api/iva');
   if (!response.ok) throw new Error('No se pudieron leer los datos locales.');
   records = await response.json();
+  const updated = records.map(record => record.actualizado).filter(Boolean).sort().at(-1);
+  if (updated) {
+    const date = new Date(updated.replace(' ', 'T') + 'Z');
+    lastUpdate.dateTime = date.toISOString();
+    lastUpdate.textContent = new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).format(date);
+  } else {
+    lastUpdate.removeAttribute('datetime');
+    lastUpdate.textContent = '—';
+  }
   const years = [...new Set(records.map(record => record.periodo.slice(0, 4)))].sort().reverse();
   const selected = yearPicker.value;
   yearPicker.replaceChildren(...years.map(year => new Option(year, year)));
