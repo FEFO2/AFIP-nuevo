@@ -2,9 +2,9 @@
 
 ## Material local ya disponible
 
-En el árbol local de `main` ya existen `QWEN.md`, `src/consultar_cliente.py` y `data/clientes_recurrentes.json`. El JSON reúne **56 fichas** con razón social, documento, alias, cantidad de facturas y tipos de comprobante e IVA observados. Una ficha tiene `tipo_factura_para_emitir` explícito y dos tienen `condicion_iva_para_emitir`. `QWEN.md` indica que esas instrucciones actuales prevalecen sobre los antecedentes y que una coincidencia ambigua se resuelve antes de facturar.
+En `feature_interfaz` están `QWEN.md`, `src/consultar_cliente.py` y la base local `.local/clientes_recurrentes.json`. El JSON reúne **56 fichas** con razón social, documento, alias, cantidad de facturas y tipos de comprobante e IVA observados. Una ficha tiene `tipo_factura_para_emitir` explícito y dos tienen `condicion_iva_para_emitir`. `QWEN.md` indica que esas instrucciones actuales prevalecen sobre los antecedentes y que una coincidencia ambigua se resuelve antes de facturar.
 
-Estos archivos están **sin seguimiento de Git** en ese árbol y aún no forman parte de `feature_interfaz`. No se deben copiar a una rama o publicar datos de clientes al integrar el sistema. Primero se reutilizará su estructura y se definirá un almacenamiento local protegido para los datos. Qwen tampoco lee estos archivos automáticamente: la aplicación debe consultar la ficha y pasarle solo el contexto necesario para cada solicitud.
+El JSON real permanece **fuera de Git** porque el repositorio remoto es público. El buscador y la guía pueden versionarse sin datos fiscales. Ollama no lee estos archivos automáticamente: la aplicación debe consultar la ficha y pasarle solo el contexto necesario para cada solicitud.
 
 ## Ficha propuesta
 
