@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Centro de control · Arancia Travel</title>
+<link rel="stylesheet" href="panel.css">
+<header><div class="top"><img src="arancia-logo.png" alt="Arancia Travel"><span class="product">Centro de control</span><span class="profile"><b>F</b> Fran</span></div></header>
+<main><section class="welcome"><div><h1>Bienvenida, Fran<span>.</span></h1><p>¿Qué tarea querés realizar hoy?</p></div><div class="route" aria-hidden="true"><i></i><strong>✈</strong></div></section>
+<section aria-labelledby="facturacion-heading">
+  <h2 class="section-title" id="facturacion-heading">Facturación</h2>
+  <div class="cards" id="facturacion"></div>
+</section>
+<section aria-labelledby="gestion-heading">
+  <h2 class="section-title" id="gestion-heading">Conciliación y gestión de facturas</h2>
+  <div class="cards" id="gestion"></div>
+</section>
+</main>
+<dialog id="detail" aria-labelledby="task-name"><button class="close" aria-label="Cerrar">×</button><small>Vista de ejemplo</small><h2 id="task-name"></h2><p id="description"></p><div id="options"></div><button class="back">Volver a tareas</button></dialog>
+<dialog id="request" aria-labelledby="request-title">
+  <button class="close" type="button" aria-label="Cerrar solicitud">×</button>
+  <small>Prototipo local</small>
+  <h2 id="request-title">Solicitar factura</h2>
+  <form>
+    <section class="form-section"><h3>Cliente</h3>
+    <div class="customer-fields">
+      <label>Cliente<select id="client" required><option value="11111111" selected>Cliente de prueba</option></select></label>
+      <label>Tipo de documento<select id="document-type" required>
+        <option value="cuit">CUIT</option><option value="dni">DNI</option>
+      </select></label>
+      <label>Número de documento<input id="document-number" value="11111111" required inputmode="numeric" pattern="[0-9]{7,11}"></label>
+    </div>
+    </section>
+    <section class="form-section"><h3>Datos de facturación</h3>
+    <div class="customer-fields">
+      <label>Tipo de factura<select id="invoice-type" required><option value="A">Factura A</option><option value="B">Factura B</option></select></label>
+      <label>Condición de IVA del cliente<select id="customer-tax" required>
+        <option value="responsable inscripto">Responsable inscripto</option>
+        <option value="responsable monotributo">Responsable monotributo</option>
+        <option value="consumidor final">Consumidor final</option>
+        <option value="sujeto exento">Sujeto exento</option>
+      </select></label>
+      <label>Punto de venta<input id="point-of-sale" value="2" required inputmode="numeric" pattern="[0-9]+"></label>
+    </div>
+    <label id="address-field" hidden>Dirección del cliente<input id="customer-address"></label>
+    </section>
+    <section class="form-section"><h3>Entrega</h3>
+    <label>Correo donde recibir la factura
+      <input id="delivery-email" type="email" autocomplete="email" required placeholder="nombre@empresa.com">
+    </label>
+    <p id="client-status" role="status"></p>
+    </section>
+    <section class="form-section"><h3>Conceptos</h3>
+    <label class="usd"><input id="usd" type="checkbox"> Facturar en USD</label>
+    <label id="fx-field" hidden>Tipo de cambio (ARS por 1 USD)
+      <input id="fx" inputmode="decimal" pattern="[0-9]{1,12}([.,][0-9]{1,6})?" required disabled placeholder="Ej. 1250,50" title="Ingresá un valor positivo con hasta seis decimales, sin separadores de miles.">
+    </label>
+    <div id="lines"></div>
+    <template id="line-template">
+      <fieldset class="invoice-line">
+        <legend></legend>
+        <div class="line-fields">
+          <label>Concepto
+            <input name="concept" required pattern=".*\S.*" placeholder="Intermediación de pasajes aéreos">
+          </label>
+          <label>Tipo de IVA
+            <select name="tax" required>
+              <option value="">Seleccioná una opción</option>
+              <option value="no-gravado">No gravado</option>
+              <option value="exento">Exento</option>
+              <option value="105">10,5 %</option>
+              <option value="210">21 %</option>
+            </select>
+          </label>
+          <label>Monto sin IVA
+            <input name="amount" inputmode="decimal" required pattern="[0-9]+([.,][0-9]{1,2})?" placeholder="453,15" title="Ingresá el importe sin separador de miles, con hasta dos decimales.">
+          </label>
+        </div>
+        <button type="button" class="remove">Quitar concepto</button>
+      </fieldset>
+    </template>
+    <button id="add-line" type="button">+ Agregar concepto</button>
+    </section>
+    <div class="form-actions"><button class="back">Preparar borrador</button></div>
+  </form>
+  <section id="draft" aria-live="polite"></section>
+</dialog>
+<script src="solicitud.js"></script>
+<script src="clientes.js"></script>
+<script src="panel.js"></script></html>
