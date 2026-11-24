@@ -35,3 +35,28 @@ for (const task of tasks) {
   document.getElementById(task.group).append(button);
 }
 for (const button of detail.querySelectorAll('button')) button.onclick = () => detail.close();
+
+const pendingItems = [
+  {count:3, singular:'factura sin conciliar en Bookit', plural:'facturas sin conciliar en Bookit', task:'Conciliar facturación'},
+  {count:2, singular:'factura de Newsan pendiente de carga', plural:'facturas de Newsan pendientes de carga', task:'Cargar factura Newsan'},
+  {count:4, singular:'correo extra por revisar', plural:'correos extras por revisar', task:'Revisar facturas de Gmail'}
+];
+const pendingList = document.querySelector('#pending-list');
+for (const item of pendingItems) {
+  const button = document.createElement('button');
+  button.className = 'pending-item';
+  const count = document.createElement('strong');
+  count.textContent = item.count;
+  const label = document.createElement('span');
+  label.textContent = 'Tenés ' + item.count + ' ' + (item.count === 1 ? item.singular : item.plural);
+  const action = document.createElement('span');
+  action.className = 'pending-action';
+  action.textContent = 'Ver tarea';
+  button.append(count, label, action);
+  button.onclick = () => {
+    const card = Array.from(document.querySelectorAll('.card'))
+      .find(candidate => candidate.querySelector('strong').textContent === item.task);
+    card.click();
+  };
+  pendingList.append(button);
+}
