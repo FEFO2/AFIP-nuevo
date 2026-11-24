@@ -1,5 +1,11 @@
 # Base de clientes a partir del historial de facturación
 
+## Material local ya disponible
+
+En el árbol local de `main` ya existen `QWEN.md`, `src/consultar_cliente.py` y `data/clientes_recurrentes.json`. El JSON reúne **56 fichas** con razón social, documento, alias, cantidad de facturas y tipos de comprobante e IVA observados. Una ficha tiene `tipo_factura_para_emitir` explícito y dos tienen `condicion_iva_para_emitir`. `QWEN.md` indica que esas instrucciones actuales prevalecen sobre los antecedentes y que una coincidencia ambigua se resuelve antes de facturar.
+
+Estos archivos están **sin seguimiento de Git** en ese árbol y aún no forman parte de `feature_interfaz`. No se deben copiar a una rama o publicar datos de clientes al integrar el sistema. Primero se reutilizará su estructura y se definirá un almacenamiento local protegido para los datos. Qwen tampoco lee estos archivos automáticamente: la aplicación debe consultar la ficha y pasarle solo el contexto necesario para cada solicitud.
+
 ## Ficha propuesta
 
 | Dato | Uso |
@@ -12,7 +18,7 @@
 | Tipo y número de documento, dirección, punto de venta | Datos que requiere el flujo vigente según el caso. |
 | Fuente y última confirmación | Referencia al comprobante o correo que respalda la ficha y cuándo se verificó. |
 
-La tabla `clientes` actual solo guarda CUIT y razón social. La ficha propuesta amplía esos datos; los alias necesitan una estructura propia para detectar duplicados y coincidencias ambiguas.
+La tabla SQLite `clientes` del centro de control solo guarda CUIT y razón social. La ficha propuesta puede partir del JSON local existente y ampliar lo necesario; los alias necesitan una estructura que detecte duplicados y coincidencias ambiguas.
 
 ## Construcción a partir del correo
 
@@ -22,7 +28,7 @@ La tabla `clientes` actual solo guarda CUIT y razón social. La ficha propuesta 
 4. Estimar la preferencia de factura a partir de las operaciones observadas, mostrando cuántas respaldan cada tipo y cuándo fue la última. No tratar la frecuencia como una regla fiscal.
 5. Revisar manualmente conflictos, datos desactualizados y alias compartidos antes de activar una ficha para generar órdenes.
 
-La extracción del historial se hará después de identificar el buzón y los mensajes pertinentes. Hasta entonces, solo se conserva el cliente ficticio de prueba. No se incluyen correos reales ni datos fiscales reales en estos documentos o en los casos de Qwen.
+Las 56 fichas ya son un punto de partida parcial. Para ampliar o confirmar datos desde el correo habrá que identificar los mensajes pertinentes y revisar los resultados. No se incluyen correos reales ni datos fiscales reales en estos documentos o en los casos de Qwen.
 
 ## Aplicación de la ficha a una solicitud
 
