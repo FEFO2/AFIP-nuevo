@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -16,13 +17,14 @@ CONCEPT = {
     "type": "object",
     "properties": {
         "concepto": {"type": "string"},
+        "importe_informado": {"type": ["string", "null"]},
         "precio_neto": {"type": ["string", "null"]},
         "iva": {
             "type": ["string", "null"],
             "enum": ["no gravado", "exento", "10,5%", "21%", None],
         },
     },
-    "required": ["concepto", "precio_neto", "iva"],
+    "required": ["concepto", "importe_informado", "precio_neto", "iva"],
     "additionalProperties": False,
 }
 
@@ -52,6 +54,24 @@ SCHEMA = {
     "required": ["facturas"],
     "additionalProperties": False,
 }
+
+
+def normalizar_importe(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    value = value.strip().replace(" ", "")
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?", value):
+        value = value.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?", value):
+        value = value.replace(",", "")
+    elif re.fullmatch(r"\d+(?:,\d{1,2})?", value):
+        value = value.replace(",", ".")
+    if not re.fullmatch(r"\d+(?:\.\d{1,2})?", value):
+        return None
+    whole, _, fraction = value.partition(".")
+    return f"{int(whole)}.{fraction.ljust(2, '0')}"
 
 
 def main():
@@ -94,6 +114,10 @@ def main():
 
     if not isinstance(facturas, dict) or not isinstance(facturas.get("facturas"), list):
         parser.exit(1, "Ollama devolvió un JSON sin la lista facturas.\n")
+    for invoice in facturas["facturas"]:
+        for concept in invoice["conceptos"]:
+            for key in ("importe_informado", "precio_neto"):
+                concept[key] = normalizar_importe(concept[key])
     sys.stdout.reconfigure(encoding="utf-8")
     print(json.dumps(facturas, ensure_ascii=False, indent=2))
 

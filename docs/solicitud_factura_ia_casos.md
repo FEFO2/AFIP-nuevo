@@ -6,7 +6,7 @@ Los ejemplos son ficticios. Se evalúa la **extracción**, antes de consultar la
 
 **Entrada:** «Factura a Cliente de prueba: intermediación de pasajes aéreos por 453,15 sin IVA al 10,5 % y gestión administrativa por 100 sin IVA al 21 %. En pesos.»
 
-**Esperado:** Una factura con `cliente="Cliente de prueba"`, `cuit=null`, `tipo_factura=null`, `condicion_iva=null`, `moneda="ARS"`. Dos conceptos: `453.15` con `10,5%` y `100.00` con `21%`. La preferencia A y los datos fiscales se aplican después desde la ficha.
+**Esperado:** Una factura con `cliente="Cliente de prueba"`, `cuit=null`, `tipo_factura=null`, `condicion_iva=null`, `moneda="ARS"`. Dos conceptos: `importe_informado` y `precio_neto` de `453.15` con `10,5%`, y `100.00` con `21%`. La preferencia A y los datos fiscales se aplican después desde la ficha.
 
 ## 2. Nombre de código y alícuota común
 
@@ -36,7 +36,7 @@ Los ejemplos son ficticios. Se evalúa la **extracción**, antes de consultar la
 
 **Entrada:** «Cliente de prueba, hotel por 121 pesos finales con IVA 21 %.»
 
-**Esperado:** Una factura con concepto «hotel», `iva="21%"`, `precio_neto=null` y `moneda="ARS"`. `121.00` no se presenta como neto; el monto requiere conversión verificada o revisión.
+**Esperado:** Una factura con concepto «hotel», `iva="21%"`, `importe_informado="121.00"`, `precio_neto=null` y `moneda="ARS"`. El monto requiere conversión verificada o revisión.
 
 ## 7. Datos insuficientes
 
@@ -44,6 +44,12 @@ Los ejemplos son ficticios. Se evalúa la **extracción**, antes de consultar la
 
 **Esperado:** Una factura con `cliente=null`, `cuit=null`, `tipo_factura=null`, `condicion_iva=null`, `moneda="ARS"`. Puede aparecer el concepto «pasajes», con `precio_neto=null` e `iva=null`. No se crea orden.
 
+## 8. Venta sin desglose fiscal
+
+**Entrada:** «Hola. Te pido fc para CLIENTE-DEMO. Detalle: Emisión de pasajes para Pasajero Uno y Pasajera Dos. Venta $ 123.456. Gracias.»
+
+**Esperado:** Una factura con `cliente="CLIENTE-DEMO"`, `cuit=null`, `tipo_factura=null`, `condicion_iva=null`, `moneda="ARS"`. El concepto conserva las dos referencias ficticias. `importe_informado="123456.00"`, `precio_neto=null` e `iva=null`. «Venta» no indica monto neto ni categoría de IVA. La ficha del cliente se consulta después de extraer el correo.
+
 ## Criterio de evaluación
 
-Comparar cantidad de facturas, asignación de conceptos, cliente o código, CUIT, tipo de factura, condición, moneda, neto e IVA. Registrar datos inventados, omisiones y mezclas entre facturas. Un JSON válido con datos incorrectos no aprueba. El tipo de cambio y el correo de entrega no forman parte de la respuesta del modelo.
+Comparar cantidad de facturas, asignación de conceptos, cliente o código, CUIT, tipo de factura, condición, moneda, importe informado, neto e IVA. Registrar datos inventados, omisiones, nombres truncados y mezclas entre facturas. Un JSON válido con datos incorrectos no aprueba. El tipo de cambio y el correo de entrega no forman parte de la respuesta del modelo.
