@@ -1,151 +1,200 @@
 const tabs = document.querySelectorAll('.app-tab');
-const views = {tasks:document.querySelector('#tasks-view'), numbers:document.querySelector('#numbers-view')};
+const views = {
+  tasks: document.querySelector('#tasks-view'),
+  numbers: document.querySelector('#numbers-view')
+};
 const yearPicker = document.querySelector('#iva-year');
-const ivaContent = document.querySelector('#iva-content');
-const ivaStatus = document.querySelector('#iva-status');
-let ivaRecords = [];
+const content = document.querySelector('#iva-content');
+const status = document.querySelector('#iva-status');
+const coverage = document.querySelector('#iva-coverage');
 const fields = [
-  ['neto_105','Neto 10,5 %'],['neto_21','Neto 21 %'],
-  ['iva_105','IVA 10,5 %'],['iva_21','IVA 21 %'],
-  ['no_gravado','No gravado'],['total','Total']
+  ['neto_105', 'Neto 10,5 %'], ['neto_21', 'Neto 21 %'],
+  ['iva_105', 'IVA 10,5 %'], ['iva_21', 'IVA 21 %'],
+  ['no_gravado', 'No gravado'], ['total', 'Total']
 ];
-const numberFormat = new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const monthFormat = new Intl.DateTimeFormat('es-AR',{month:'long',timeZone:'UTC'});
+const calculations = [
+  ['diferencia_iva_21', 'Diferencia IVA 21 %'],
+  ['diferencia_iva_105', 'Diferencia IVA 10,5 %'],
+  ['diferencia_no_gravado', 'Diferencia no gravado'],
+  ['diferencia_facturacion', 'Diferencia facturación'],
+  ['importe_gravado_21', 'Importe gravado del 21 %'],
+  ['importe_gravado_105', 'Importe gravado del 10,5 %'],
+  ['importe_gravado_faltante', 'Importe gravado faltante']
+];
+const formatter = new Intl.NumberFormat('es-AR', {
+  minimumFractionDigits: 2, maximumFractionDigits: 2
+});
+const monthFormatter = new Intl.DateTimeFormat('es-AR', {
+  month: 'long', timeZone: 'UTC'
+});
+let records = [];
 
 function cents(value) {
   return Math.round(Number(value) * 100);
 }
+
 function display(value) {
-  return numberFormat.format(value / 100);
+  return formatter.format(value / 100);
 }
-function sumGroup(records, group) {
-  return Object.fromEntries(fields.map(([key]) => [
-    key, records.reduce((sum, record) => sum + cents(record[group][key]), 0)
+
+function sumValues(rows, source, keys) {
+  return Object.fromEntries(keys.map(([key]) => [
+    key, rows.reduce((total, row) => total + cents(row[source][key]), 0)
   ]));
 }
-function metric(label, amount) {
-  const element = document.createElement('div');
-  element.className = 'iva-metric';
-  const title = document.createElement('span');
-  title.textContent = label;
-  const value = document.createElement('strong');
-  value.textContent = display(amount);
-  element.append(title,value);
-  return element;
+
+function monthName(period) {
+  const month = Number(period.slice(5, 7));
+  const name = monthFormatter.format(new Date(Date.UTC(2026, month - 1, 1)));
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
-function renderNumbers() {
-  const year = yearPicker.value;
-  const records = ivaRecords.filter(record => record.periodo.startsWith(year)).sort((a,b)=>a.periodo.localeCompare(b.periodo));
-  ivaContent.replaceChildren();
-  document.querySelector('#iva-coverage').textContent = records.length + ' de 12 meses disponibles';
-  if (!records.length) {
-    ivaContent.textContent = 'No hay datos guardados para este año. Usá «Actualizar desde Arancia» cuando el acceso esté configurado.';
-    return;
+
+function sectionTitle(title) {
+  const heading = document.createElement('h2');
+  heading.textContent = title;
+  return heading;
+}
+
+function verticalBlock(title, values, entries) {
+  const block = document.createElement('section');
+  block.className = 'iva-vertical-block';
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  const list = document.createElement('dl');
+  for (const [key, label] of entries) {
+    const term = document.createElement('dt');
+    const amount = document.createElement('dd');
+    term.textContent = label;
+    amount.textContent = display(values[key]);
+    list.append(term, amount);
   }
-  const sales = sumGroup(records,'ventas');
-  const purchases = sumGroup(records,'compras');
-  const overview = document.createElement('div');
-  overview.className = 'iva-overview';
-  overview.append(
-    metric('Total ventas · año',sales.total),
-    metric('Total compras · año',purchases.total),
-    metric('Diferencia IVA 21 %',sales.iva_21-purchases.iva_21),
-    metric('Diferencia IVA 10,5 %',sales.iva_105-purchases.iva_105)
+  block.append(heading, list);
+  return block;
+}
+
+function renderVertical(title, sales, purchases, differences) {
+  const section = document.createElement('section');
+  section.className = 'iva-vertical-section';
+  section.append(sectionTitle(title));
+  section.append(
+    verticalBlock('Ventas', sales, fields),
+    verticalBlock('Compras', purchases, fields),
+    verticalBlock('Diferencias y bases calculadas', differences, calculations)
   );
-  ivaContent.append(overview);
-  const annualTitle = document.createElement('h2');
-  annualTitle.textContent = 'Resumen anual';
-  const annualScroll = document.createElement('div');
-  annualScroll.className = 'iva-table-scroll annual-scroll';
-  const annualTable = document.createElement('table');
-  annualTable.className = 'iva-table annual-table';
-  const annualHead = annualTable.createTHead().insertRow();
-  for (const label of ['Origen', ...fields.map(([,name]) => name)]) {
-    const th = document.createElement('th');
-    th.textContent = label;
-    annualHead.append(th);
+  return section;
+}
+
+function renderPreviousMonths(rows) {
+  const section = document.createElement('section');
+  section.className = 'iva-previous';
+  section.append(sectionTitle('Meses anteriores'));
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'No hay meses anteriores para este año.';
+    section.append(empty);
+    return section;
   }
-  const annualBody = annualTable.createTBody();
-  for (const [label, values] of [
-    ['Ventas', sales],
-    ['Compras', purchases],
-    ['Diferencia', Object.fromEntries(fields.map(([key]) => [key, sales[key] - purchases[key]]))]
-  ]) {
-    const row = annualBody.insertRow();
-    row.insertCell().textContent = label;
-    for (const [key] of fields) row.insertCell().textContent = display(values[key]);
-  }
-  annualScroll.append(annualTable);
-  ivaContent.append(annualTitle, annualScroll);
-  const title = document.createElement('h2');
-  title.textContent = 'Detalle mensual';
-  ivaContent.append(title);
   const scroll = document.createElement('div');
   scroll.className = 'iva-table-scroll';
   const table = document.createElement('table');
   table.className = 'iva-table';
-  const head = table.createTHead();
-  const groups = head.insertRow();
-  for (const [label,span] of [['Mes',1],['Ventas',6],['Compras',6]]) {
-    const th = document.createElement('th');
-    th.textContent = label;
-    th.colSpan = span;
-    groups.append(th);
+  const groupRow = table.createTHead().insertRow();
+  for (const [label, span] of [['Mes', 1], ['Ventas', 6], ['Compras', 6], ['Diferencias y bases calculadas', 7]]) {
+    const cell = document.createElement('th');
+    cell.textContent = label;
+    cell.colSpan = span;
+    groupRow.append(cell);
   }
-  const columns = head.insertRow();
-  const month = document.createElement('th');
-  month.textContent = 'Período';
-  columns.append(month);
-  for (const group of ['ventas','compras']) {
-    for (const [,label] of fields) {
-      const th = document.createElement('th');
-      th.textContent = label;
-      columns.append(th);
+  const headerRow = table.tHead.insertRow();
+  for (const label of ['Período', ...fields.map(([, name]) => name), ...fields.map(([, name]) => name), ...calculations.map(([, name]) => name)]) {
+    const cell = document.createElement('th');
+    cell.textContent = label;
+    headerRow.append(cell);
+  }
+  const body = table.createTBody();
+  for (const record of rows) {
+    const row = body.insertRow();
+    row.insertCell().textContent = monthName(record.periodo);
+    for (const source of ['ventas', 'compras']) {
+      for (const [key] of fields) row.insertCell().textContent = display(cents(record[source][key]));
     }
-  }
-  for (const record of records) {
-    const row = table.createTBody().insertRow();
-    const [,monthNumber] = record.periodo.split('-');
-    const label = monthFormat.format(new Date(Date.UTC(2026,Number(monthNumber)-1,1)));
-    row.insertCell().textContent = label.charAt(0).toUpperCase()+label.slice(1);
-    for (const group of ['ventas','compras']) {
-      for (const [key] of fields) row.insertCell().textContent = display(cents(record[group][key]));
-    }
-  }
-  const totals = table.createTFoot().insertRow();
-  totals.insertCell().textContent = 'Acumulado ' + year;
-  for (const group of [sales,purchases]) {
-    for (const [key] of fields) totals.insertCell().textContent = display(group[key]);
+    for (const [key] of calculations) row.insertCell().textContent = display(cents(record.calculos[key]));
   }
   scroll.append(table);
-  ivaContent.append(scroll);
+  section.append(scroll);
+  return section;
 }
+
+function renderNumbers() {
+  const year = yearPicker.value;
+  const yearly = records
+    .filter(record => record.periodo.startsWith(year))
+    .sort((first, second) => second.periodo.localeCompare(first.periodo));
+  content.replaceChildren();
+  coverage.textContent = yearly.length + ' de 12 meses disponibles';
+  if (!yearly.length) {
+    content.textContent = 'No hay datos guardados para este año.';
+    return;
+  }
+  const annual = {
+    ventas: sumValues(yearly, 'ventas', fields),
+    compras: sumValues(yearly, 'compras', fields),
+    calculos: sumValues(yearly, 'calculos', calculations)
+  };
+  content.append(renderVertical(
+    'Acumulado ' + year, annual.ventas, annual.compras, annual.calculos
+  ));
+  const today = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit'
+    }).formatToParts(new Date()).map(part => [part.type, part.value])
+  );
+  const currentPeriod = today.year + '-' + today.month;
+  const current = yearly.find(record => record.periodo === currentPeriod);
+  if (year === today.year) {
+    if (current) {
+      content.append(renderVertical(
+        monthName(current.periodo) + ' ' + year,
+        Object.fromEntries(fields.map(([key]) => [key, cents(current.ventas[key])])),
+        Object.fromEntries(fields.map(([key]) => [key, cents(current.compras[key])])),
+        Object.fromEntries(calculations.map(([key]) => [key, cents(current.calculos[key])]))
+      ));
+    } else {
+      const message = document.createElement('p');
+      message.textContent = 'El mes en curso todavía no figura en Cálculo de IVA.';
+      content.append(message);
+    }
+  }
+  content.append(renderPreviousMonths(
+    yearly.filter(record => record.periodo !== currentPeriod)
+  ));
+}
+
 async function loadNumbers() {
   const response = await fetch('/api/iva');
   if (!response.ok) throw new Error('No se pudieron leer los datos locales.');
-  ivaRecords = await response.json();
-  const years = [...new Set(ivaRecords.map(row=>row.periodo.slice(0,4)))].sort().reverse();
-  const previous = yearPicker.value;
-  yearPicker.replaceChildren(...years.map(year=>new Option(year,year)));
-  if (years.includes(previous)) yearPicker.value = previous;
-  if (!years.length) {
-    yearPicker.add(new Option(String(new Date().getFullYear())));
-  }
+  records = await response.json();
+  const years = [...new Set(records.map(record => record.periodo.slice(0, 4)))].sort().reverse();
+  const selected = yearPicker.value;
+  yearPicker.replaceChildren(...years.map(year => new Option(year, year)));
+  if (years.includes(selected)) yearPicker.value = selected;
+  if (!years.length) yearPicker.add(new Option(String(new Date().getFullYear())));
   renderNumbers();
 }
+
 yearPicker.onchange = renderNumbers;
 document.querySelector('#refresh-iva').onclick = async event => {
   const button = event.currentTarget;
   button.disabled = true;
-  ivaStatus.textContent = 'Leyendo Cálculo de IVA…';
+  status.textContent = 'Leyendo Cálculo de IVA…';
   try {
-    const response = await fetch('/api/iva/actualizar',{method:'POST'});
+    const response = await fetch('/api/iva/actualizar', {method: 'POST'});
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
     await loadNumbers();
-    ivaStatus.textContent = result.periodos_actualizados + ' período(s) actualizados.';
-  } catch(error) {
-    ivaStatus.textContent = error.message;
+    status.textContent = result.periodos_actualizados + ' período(s) actualizados.';
+  } catch (error) {
+    status.textContent = error.message;
   } finally {
     button.disabled = false;
   }
@@ -154,11 +203,13 @@ for (const tab of tabs) {
   tab.onclick = () => {
     for (const item of tabs) {
       const active = item === tab;
-      item.classList.toggle('active',active);
-      if (active) item.setAttribute('aria-current','page');
+      item.classList.toggle('active', active);
+      if (active) item.setAttribute('aria-current', 'page');
       else item.removeAttribute('aria-current');
       views[item.dataset.view].hidden = !active;
     }
-    if (tab.dataset.view === 'numbers') loadNumbers().catch(error => ivaStatus.textContent = error.message);
+    if (tab.dataset.view === 'numbers') {
+      loadNumbers().catch(error => status.textContent = error.message);
+    }
   };
 }

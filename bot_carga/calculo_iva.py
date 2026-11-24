@@ -16,6 +16,15 @@ MONTHS = {
     "setiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
 }
 FIELDS = ("neto_105", "neto_21", "iva_105", "iva_21", "no_gravado", "total")
+CALCULATIONS = {
+    "diferencia iva 21": "diferencia_iva_21",
+    "diferencia iva 10.5": "diferencia_iva_105",
+    "diferencia no gravado": "diferencia_no_gravado",
+    "diferencia facturacion": "diferencia_facturacion",
+    "importe gravado del 21": "importe_gravado_21",
+    "importe gravado del 10.5": "importe_gravado_105",
+    "importe gravado faltante": "importe_gravado_faltante",
+}
 
 
 def normalized(value):
@@ -79,20 +88,30 @@ def parse_monthly_html(html):
         headers = " ".join(normalized(cell["text"]) for row in table for cell in row if cell["tag"] == "th")
         if not all(label in headers for label in ("fecha", "neto", "iva", "total")):
             continue
+        record = None
+        calculations = {}
         for row in table:
             cells = [cell["text"] for cell in row if cell["tag"] == "td"]
-            if len(cells) != 13:
-                continue
-            period = normalized(cells[0])
-            match = re.fullmatch(r"([a-z]+)\s+(20\d{2})", period)
-            if not match or match.group(1) not in MONTHS:
-                continue
-            amounts = [parse_amount(value) for value in cells[1:]]
-            records.append({
-                "periodo": f"{match.group(2)}-{MONTHS[match.group(1)]:02d}",
-                "ventas": dict(zip(FIELDS, amounts[:6])),
-                "compras": dict(zip(FIELDS, amounts[6:])),
-            })
+            if len(cells) == 13:
+                period = normalized(cells[0])
+                match = re.fullmatch(r"([a-z]+)\s+(20\d{2})", period)
+                if not match or match.group(1) not in MONTHS:
+                    continue
+                amounts = [parse_amount(value) for value in cells[1:]]
+                record = {
+                    "periodo": f"{match.group(2)}-{MONTHS[match.group(1)]:02d}",
+                    "ventas": dict(zip(FIELDS, amounts[:6])),
+                    "compras": dict(zip(FIELDS, amounts[6:])),
+                }
+            elif len(cells) == 2:
+                label = normalized(cells[0]).strip()
+                if label in CALCULATIONS:
+                    calculations[CALCULATIONS[label]] = parse_amount(cells[1])
+        if record:
+            if set(calculations) != set(CALCULATIONS.values()):
+                raise ValueError(f"Faltan importes calculados para {record['periodo']}.")
+            record["calculos"] = calculations
+            records.append(record)
     if not records:
         raise ValueError("No se encontró una tabla mensual con las doce columnas esperadas.")
     periods = [item["periodo"] for item in records]
