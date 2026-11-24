@@ -72,15 +72,11 @@ function verticalBlock(title, values, entries) {
   return block;
 }
 
-function renderVertical(title, sales, purchases, differences) {
+function renderVertical(title, differences) {
   const section = document.createElement('section');
   section.className = 'iva-vertical-section';
   section.append(sectionTitle(title));
-  section.append(
-    verticalBlock('Ventas', sales, fields),
-    verticalBlock('Compras', purchases, fields),
-    verticalBlock('Diferencias y bases calculadas', differences, calculations)
-  );
+  section.append(verticalBlock('Diferencias y bases calculadas', differences, calculations));
   return section;
 }
 
@@ -136,13 +132,8 @@ function renderNumbers() {
     content.textContent = 'No hay datos guardados para este año.';
     return;
   }
-  const annual = {
-    ventas: sumValues(yearly, 'ventas', fields),
-    compras: sumValues(yearly, 'compras', fields),
-    calculos: sumValues(yearly, 'calculos', calculations)
-  };
   content.append(renderVertical(
-    'Acumulado ' + year, annual.ventas, annual.compras, annual.calculos
+    'Acumulado ' + year, sumValues(yearly, 'calculos', calculations)
   ));
   const today = Object.fromEntries(
     new Intl.DateTimeFormat('en-US', {
@@ -155,8 +146,6 @@ function renderNumbers() {
     if (current) {
       content.append(renderVertical(
         monthName(current.periodo) + ' ' + year,
-        Object.fromEntries(fields.map(([key]) => [key, cents(current.ventas[key])])),
-        Object.fromEntries(fields.map(([key]) => [key, cents(current.compras[key])])),
         Object.fromEntries(calculations.map(([key]) => [key, cents(current.calculos[key])]))
       ));
     } else {
