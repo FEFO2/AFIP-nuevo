@@ -60,3 +60,36 @@ main {padding-bottom:48px}
 .pending-item strong {min-width:32px;font-size:1.55rem;line-height:1;color:#a64d25;font-variant-numeric:tabular-nums}
 .pending-action {margin-left:auto;color:#365478;font-size:.875rem;font-weight:600;white-space:nowrap}
 @media(max-width:600px){.pending-item{flex-wrap:wrap;gap:8px 12px}.pending-action{width:100%;margin-left:44px}}
+
+.app-tabs {display:flex;gap:24px;border-bottom:1px solid #cdd4db}
+.app-tab {border:0;border-bottom:3px solid transparent;background:transparent;padding:18px 4px;color:#566879;font:inherit;font-weight:600;cursor:pointer}
+.app-tab.active {border-bottom-color:#e66a32;color:#192637}
+#numbers-view[hidden],#tasks-view[hidden] {display:none}
+.numbers-heading {display:flex;align-items:center;justify-content:space-between;gap:20px;padding:34px 0 24px}
+.numbers-heading h1 {font-size:2rem;margin:0;letter-spacing:-.04em}
+.numbers-heading p {margin:4px 0;color:#566879}
+#refresh-iva {background:#192d40;color:white;border:0;border-radius:8px;padding:10px 16px;font:inherit;cursor:pointer}
+#refresh-iva:disabled {opacity:.55;cursor:wait}
+#iva-status:empty {display:none}
+#iva-status {color:#365478;margin:0 0 18px}
+.numbers-controls {display:flex;align-items:end;justify-content:space-between;margin:4px 0 22px;color:#566879}
+.numbers-controls label {margin:0}
+.numbers-controls select {display:block;padding:7px 32px 7px 9px;margin-top:5px}
+.iva-overview {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:32px}
+.iva-metric {background:#fff;border:1px solid #d5dce2;border-radius:12px;padding:18px;display:grid;gap:8px}
+.iva-metric span {color:#566879;font-size:.9rem}
+.iva-metric strong {font-size:1.35rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#iva-content h2 {margin-bottom:14px}
+.iva-table-scroll {overflow-x:auto;border:1px solid #d5dce2;border-radius:10px;background:#fff}
+.iva-table {border-collapse:collapse;width:100%;min-width:1450px;font-variant-numeric:tabular-nums}
+.iva-table th,.iva-table td {padding:10px 12px;text-align:right;border-bottom:1px solid #e4e9ee;white-space:nowrap}
+.iva-table th:first-child,.iva-table td:first-child {text-align:left}
+.iva-table thead tr:first-child {background:#e8eef3}
+.iva-table thead tr:last-child {background:#f2f5f8;font-size:.85rem}
+.iva-table tfoot {font-weight:700;background:#f2f5f8}
+@media(max-width:850px){.iva-overview{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.numbers-heading{align-items:flex-start;flex-direction:column}.iva-overview{grid-template-columns:1fr}}
+
+.annual-scroll {margin-bottom:32px}
+.annual-table {min-width:900px}
+.annual-table tbody tr:last-child {font-weight:700;background:#f2f5f8}

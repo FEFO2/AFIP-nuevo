@@ -2,7 +2,12 @@
 <html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Centro de control · Arancia Travel</title>
 <link rel="stylesheet" href="panel.css">
 <header><div class="top"><img src="arancia-logo.png" alt="Arancia Travel"><span class="product">Centro de control</span><span class="profile"><b>F</b> Fran</span></div></header>
-<main><section class="welcome"><div><h1>Bienvenida, Fran<span>.</span></h1><p>¿Qué tarea querés realizar hoy?</p></div><div class="route" aria-hidden="true"><i></i><strong>✈</strong></div></section>
+<main>
+<nav class="app-tabs" aria-label="Secciones del centro de control">
+  <button type="button" class="app-tab active" data-view="tasks" aria-current="page">Tareas</button>
+  <button type="button" class="app-tab" data-view="numbers">Números de Arancia</button>
+</nav>
+<div id="tasks-view"><section class="welcome"><div><h1>Bienvenida, Fran<span>.</span></h1><p>¿Qué tarea querés realizar hoy?</p></div><div class="route" aria-hidden="true"><i></i><strong>✈</strong></div></section>
 <section class="pending-section" aria-labelledby="pending-heading">
   <div class="pending-heading"><h2 id="pending-heading">Pendientes</h2><span>Datos de ejemplo</span></div>
   <div class="pending-list" id="pending-list"></div>
@@ -14,6 +19,16 @@
 <section aria-labelledby="gestion-heading">
   <h2 class="section-title" id="gestion-heading">Conciliación y gestión de facturas</h2>
   <div class="cards" id="gestion"></div>
+</section>
+</div>
+<section id="numbers-view" hidden aria-labelledby="numbers-heading">
+  <div class="numbers-heading">
+    <div><h1 id="numbers-heading">Números de Arancia</h1><p>Facturación · Cálculo de IVA</p></div>
+    <button id="refresh-iva" type="button">Actualizar desde Arancia</button>
+  </div>
+  <p id="iva-status" role="status"></p>
+  <div class="numbers-controls"><label>Año <select id="iva-year"></select></label><span id="iva-coverage"></span></div>
+  <div id="iva-content"></div>
 </section>
 </main>
 <dialog id="detail" aria-labelledby="task-name"><button class="close" aria-label="Cerrar">×</button><small>Vista de ejemplo</small><h2 id="task-name"></h2><p id="description"></p><div id="options"></div><button class="back">Volver a tareas</button></dialog>
@@ -87,4 +102,5 @@
 </dialog>
 <script src="solicitud.js"></script>
 <script src="clientes.js"></script>
-<script src="panel.js"></script></html>
+<script src="panel.js"></script>
+<script src="iva.js"></script></html>

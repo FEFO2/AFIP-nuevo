@@ -12,10 +12,12 @@ from pathlib import Path
 from uuid import UUID
 from zoneinfo import ZoneInfo
 from datetime import datetime
+from threading import Lock
 
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE = ROOT / ".local" / "facturacion.sqlite"
-ASSETS = {"index.html", "panel.css", "panel.js", "solicitud.js", "clientes.js", "arancia-logo.png"}
+ASSETS = {"index.html", "panel.css", "panel.js", "solicitud.js", "clientes.js", "iva.js", "arancia-logo.png"}
+IVA_SYNC_LOCK = Lock()
 RATES = {"no gravado": 0, "exento": 0, "10,5%": 105, "21%": 210}
 
 
@@ -27,6 +29,10 @@ def connect():
         CREATE TABLE IF NOT EXISTS ordenes (
             id TEXT PRIMARY KEY, creada TEXT DEFAULT CURRENT_TIMESTAMP,
             estado TEXT DEFAULT 'pendiente', contenido TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS resumen_iva (
+            periodo TEXT PRIMARY KEY, contenido TEXT NOT NULL,
+            actualizado TEXT DEFAULT CURRENT_TIMESTAMP
         );
     """)
     with db:
@@ -191,6 +197,13 @@ class Panel(BaseHTTPRequestHandler):
     def do_GET(self):
         if not self.valid_host():
             return self.send_error(403)
+        if self.path == "/api/iva":
+            with closing(connect()) as db:
+                rows = db.execute("SELECT contenido, actualizado FROM resumen_iva ORDER BY periodo DESC")
+                return self.answer([
+                    {**json.loads(content), "actualizado": updated}
+                    for content, updated in rows
+                ])
         if self.path == "/api/clientes":
             with closing(connect()) as db:
                 rows = db.execute("SELECT cuit,razon_social FROM clientes ORDER BY razon_social COLLATE NOCASE")
@@ -203,6 +216,29 @@ class Panel(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.valid_host() or self.headers.get("Origin") != "http://" + self.headers["Host"]:
             return self.send_error(403)
+        if self.path == "/api/iva/actualizar":
+            if not IVA_SYNC_LOCK.acquire(blocking=False):
+                return self.answer({"error": "Ya hay una actualización en curso."}, status=409)
+            try:
+                from bot_carga.calculo_iva import fetch_monthly_records
+                records = fetch_monthly_records()
+                with closing(connect()) as db, db:
+                    db.executemany(
+                        """INSERT INTO resumen_iva(periodo,contenido,actualizado)
+                           VALUES (?,?,CURRENT_TIMESTAMP)
+                           ON CONFLICT(periodo) DO UPDATE SET
+                           contenido=excluded.contenido,
+                           actualizado=CURRENT_TIMESTAMP""",
+                        [(row["periodo"], json.dumps(row, ensure_ascii=False)) for row in records],
+                    )
+                return self.answer({"periodos_actualizados": len(records)})
+            except Exception:
+                return self.answer(
+                    {"error": "No se pudo leer Cálculo de IVA. Revisá el acceso y la estructura de la página."},
+                    status=502,
+                )
+            finally:
+                IVA_SYNC_LOCK.release()
         if self.path not in ("/api/clientes", "/api/ordenes"):
             return self.send_error(404)
         try:
